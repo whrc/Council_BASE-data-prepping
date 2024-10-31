@@ -1,0 +1,267 @@
+---
+title: "2.from kyle_Random Forest Council (Neural Network)" 
+#Here, we use the Random Forest model to gapfill data based on predictors and real data - it runs simulations and learns patterns, attempting to fill in gaps based on training data and validation data 
+#Random Forest is used to do a lot of the gap-filling --we could try to improve it by increasing the trees to allow for more complex relationships and we can clean the data a little more to take out outliers (which Dani did Oct 28, 2024 - we use the re-cleaned version here)
+
+##For Council, NOTE: primary windirection is N-S at this location, S is thermokarst and degradation which can be a big methane source, so wind direction could be important at this site --> NOTE: model is elevating CH4 in the winter, may need to revisit training / other relationships we can use to make sure it's more reasonable (no real winter data available to better train model with)
+
+output: html_document
+date: "2024-09-17"
+---
+#Set working directory
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,dev = 'png')
+#knitr::opts_knit$set(root.dir = 'C:/Users/karndt.WHRC/Desktop/sites/council/data') #Edit this to set your working directory
+```
+
+
+#Load in required packages
+```{r,error=FALSE,warning=FALSE}
+rm(list = ls())
+library(data.table)
+library(ggplot2)
+library(caret)
+library(randomForest)
+library(Boruta)
+
+Sys.setenv(TZ='UTC')
+```
+
+#Load in site data
+```{r,error=FALSE,warning=FALSE}
+
+cf = fread('./council_2016_2023_era.csv') #using the re-cleaned df from Dani 
+cf = cf[complete.cases(cf$airt.eramod),]
+
+#create a sub data frame of the variables you want for a neural network (random forest)
+ncf = data.frame(cf$date,cf$FC,cf$FCH4,
+                 cf$airt.eramod,cf$rh.eramod,cf$rad.eramod,
+                 cf$ws.eramod,cf$tsoil.eramod,cf$SWC_1_1_1,
+                 cf$h.eramod,cf$le.eramod)
+
+#rename for easier names
+names(ncf) = c('date','nee',"fch4",'tair','rh','rg','ws','tsoil','swc','h','le')
+
+#calculate VPD from air t and RH
+svp = 610.7*10^((7.5*ncf$tair)/(237.3+ncf$tair))
+ncf$vpd = ((100 - ncf$rh)/100)*svp  
+
+set.seed(123)#sets the start point of models, good for repeatability
+cc = ncf[complete.cases(ncf$swc),]#create a gap free data set of the target variable
+
+#use 80% of data set as training set and 20% as test set
+sample = sample(c(TRUE, FALSE), nrow(cc), replace=TRUE, prob=c(0.8,0.2))
+train  = cc[sample, ]
+test   = cc[!sample, ]
+
+#compare to ensure all data sets are representative of total data
+hist(cc$swc)
+hist(train$swc)
+hist(test$swc)
+
+#run random forest to predict missing SWC values
+rf.swc = randomForest(formula = swc ~ tair + rh + rg + ws + tsoil + vpd + le + h,data = train,ntree = 100)
+
+#predict it on the full data set
+swc.rf = predict(object = rf.swc,newdata = ncf)
+ncf$swc.rf = swc.rf #add the variable to the main data frame
+```
+
+#Check out the SWC gap filling
+```{r}
+#time series plot of gap filled vs real
+ggplot(data = ncf)+
+  geom_point(aes(date,swc.rf*100,col='RF'))+
+  geom_point(aes(date,swc*100,col='Measured'))+
+  scale_y_continuous("SWC (%)")
+
+#validation dataset from only test data
+val = merge(test,ncf,by = "date",all.x = T)
+
+ggplot(data = val,aes(swc.rf,swc.x))+theme_bw()+geom_abline(slope = 1,intercept = 0,col='red')+
+  geom_point(alpha=0.1)+
+  scale_x_continuous(limits = c(0,70),"RF SWC (%)")+
+  scale_y_continuous(limits = c(0,70),"Measured SWC (%)")
+
+#summary stats on gap filling
+summary(lm(val$swc.x ~ val$swc.rf))
+
+#create final gap free soil moisture
+ncf$swc = ifelse(is.na(ncf$swc),ncf$swc.rf,ncf$swc)
+```
+
+#Examine variable importance
+```{r}
+set.seed(123)
+cc = ncf[complete.cases(ncf$nee),]
+cc = subset(cc,cc$nee < 12 & cc$nee > -14) #setting some limits on the spread of data to exclude some of those large outliers and tidy up the model 
+
+#this attempts to establish which of the variables have the most important influence on NEE - kyle commented this out, may not be necessary & can take a little while to run but cool to see 
+boruta = Boruta(nee ~ tair + rh + rg + ws + tsoil + swc + vpd + le + h,data = cc,doTrace = 2,maxRuns = 100)
+
+#kyle commented this out, looks at the boruta output
+plot(boruta,las = 2)
+```
+
+
+#Lets try to fill with random forest
+```{r,error=FALSE,warning=FALSE}
+#use 80% of data set as training set and 20% as test set
+sample.nee = sample(c(TRUE, FALSE), nrow(cc), replace=TRUE, prob=c(0.8,0.2))
+train.nee  = cc[sample.nee, ]
+test.nee   = cc[!sample.nee, ]
+
+hist(cc$nee)
+hist(train.nee$nee)
+hist(test.nee$nee)
+
+rfnee = randomForest(formula = nee ~ tair + rh + rg + ws + tsoil + swc + vpd + le + h,data = train.nee,ntree = 100,importance=T)
+
+pnee = predict(object = rfnee,newdata = ncf)
+
+cf$rfnee = pnee
+```
+
+
+#Time series plots
+```{r,error=FALSE,warning=FALSE}
+#This overlays the random forest modeled data points with the real data points so you can observe model agreement 
+
+#plot of certain timeframe 
+ggplot(data = cf)+theme_bw()+
+  geom_point(aes(date,rfnee,col='RF'),alpha=0.2)+
+  geom_point(aes(date,FC.c,col='Real'),alpha=0.2)+
+  scale_x_datetime(limits = as.POSIXct(c("2019-06-15","2019-06-30")))
+#plot of all years 
+ggplot(data = cf)+theme_bw()+
+  geom_point(aes(date,rfnee,col='RF'),alpha=0.2)+
+  geom_point(aes(date,FC.c,col='Real'),alpha=0.2)+
+  geom_hline(yintercept = 0)
+```
+
+
+#Validation - looking at agreement between modeled data and real data 
+```{r,error=FALSE,warning=FALSE}
+#changed to FC.c to use re-cleaned variable
+test.data.nee = merge(test.nee,cf,by = 'date',all.x = T)
+summary(lm(test.data.nee$FC.c ~ test.data.nee$rfnee))
+
+councilnee = ggplot(data = test.data.nee,aes(rfnee,FC.c))+theme_bw()+
+  geom_hline(yintercept = 0,lty=2)+
+  geom_vline(xintercept = 0,lty=2)+
+  geom_point(alpha=0.2)+
+  scale_fill_viridis_c()+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=1)+
+  scale_x_continuous(limits = c(-20,20),expression('Random Forest NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
+  scale_y_continuous(limits = c(-20,20),expression('Eddy Covariance NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
+  annotate(geom = 'text',x = 6, y = -8,label=expression(R^2~"= 0.41"),size = 3)+
+  annotate(geom = 'text',x = 6,y = -10,label=expression(Slope~"= 0.98"),size = 3)+
+  theme(text = element_text(size = 8))
+
+councilnee
+```
+
+#Examine variable importance
+```{r}
+set.seed(123)
+cc = ncf[complete.cases(ncf$fch4),]
+
+#boruta = Boruta(fch4 ~ tair + rh + rg + ws + tsoil + swc + vpd + le + h,data = cc,doTrace = 2,maxRuns = 100)
+#plot(boruta,las = 2)
+```
+
+
+#try random forest for CH4
+```{r,error=FALSE,warning=FALSE}
+#use 80% of data set as training set and 20% as test set, expanded to try to represent the larger points better
+
+#cc = subset(cc,cc$fch4 < 0.2) #this was kyle trying to get rid of bursts he saw in other datasets that were artificially creating outliers
+
+#essentially we re-run these codes with points of interest, we don't change the predictor variables below (vpd, swc, etc)
+cc = subset(cc,cc$fch4 < 50)
+cc = subset(cc,cc$fch4 > -25)
+sample.ch4 = sample(c(TRUE, FALSE), nrow(cc), replace=TRUE, prob=c(0.8,0.2))
+train.ch4  = cc[sample.ch4, ]
+test.ch4   = cc[!sample.ch4, ]
+
+hist(cc$fch4)
+hist(train.ch4$fch4)
+hist(test.ch4$fch4)
+
+summary(cc$fch4)
+summary(train.ch4$fch4)
+summary(test.ch4$fch4)
+
+rfch4 = randomForest(formula = fch4 ~ tair + rh + rg + ws + tsoil + vpd + swc + h + le,data = train.ch4,ntree = 100)
+
+pch4 = predict(object = rfch4,newdata = ncf)
+
+cf$rfch4 = pch4
+```
+
+#Plots and Validation
+```{r,error=FALSE,warning=FALSE}
+#changed to FCH4.c to use re-cleaned data 
+#Plots modeled vs real data among several dates to observe agreement 
+
+ggplot(data = cf)+theme_bw()+
+  geom_point(aes(date,rfch4,col='RF'),alpha=0.5)+
+  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
+  scale_x_datetime(limits = as.POSIXct(c("2019-07-01","2019-07-30")))
+ # scale_y_continuous(limits = c(-0.05,0.05))
+
+ggplot(data = cf)+theme_bw()+
+  geom_point(aes(date,rfch4,col='RF'),alpha=0.5)+
+  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
+  scale_x_datetime(limits = as.POSIXct(c("2019-01-01","2019-12-30")))
+ # scale_y_continuous(limits = c(-0.05,0.05))
+
+ggplot(data = cf)+theme_bw()+
+  geom_point(aes(date,rfch4,col='RF'),alpha=0.5)+
+  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
+  scale_x_datetime(limits = as.POSIXct(c("2022-01-01","2022-12-30")))
+ # scale_y_continuous(limits = c(-0.05,0.05))
+
+ggplot(data = cf)+theme_bw()+
+  geom_point(aes(date,rfch4,col='RF'),alpha=0.2)+
+  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.2)
+
+
+```
+
+
+```{r,error=FALSE,warning=FALSE}
+#changed to FCH4.c to use the re-cleaned data
+
+test.data.ch4 = merge(test.ch4,cf,by = 'date',all.x = T)
+
+councilch4 = ggplot(data = test.data.ch4,aes(rfch4,FCH4.c))+theme_bw()+
+  geom_hline(yintercept = 0,lty=2)+
+  geom_vline(xintercept = 0,lty=2)+
+  geom_point(alpha=0.2)+
+  scale_fill_viridis_c()+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=1)+
+  scale_x_continuous(limits = c(-50,150),expression('Random Forest '*CH[4]~flux~" ("*mu*mol~CH[4]~m^-2~s^-1*')'))+
+  scale_y_continuous(limits = c(-50,150),expression('Eddy Covariance '*CH[4]~flux~" ("*mu*mol~CH[4]~m^-2~s^-1*')'))+
+  annotate(geom = 'text',x = 100,y = 20,label = expression(R^2~"= 0.52"),size = 3)+
+  annotate(geom= 'text',x = 100,y = 10,label = expression(Slope~"= 1.09"),size = 3)+
+  theme(text = element_text(size = 8))
+
+councilch4
+summary(lm(test.data.ch4$FCH4.c ~ test.data.ch4$rfch4))
+```
+
+#Observing agreement between modeled and real NEE and CH4 flux data 
+```{r}
+library(cowplot)
+
+#png(filename = 'C:/Users/karndt.WHRC/Desktop/sites/YKD/plots/2023 yk2unburned gapfilling validation.png',width = 6,height = 4,units = 'in',res = 1000)
+plot_grid(councilnee,councilch4)
+#dev.off()
+```
+
+#Save the gapfilled data 
+```{r,error=FALSE,warning=FALSE}
+write.csv(x = cf,file = "./council_2017_2023_gf.csv",row.names = F) #_gf to indicate it's been gapfilled 
+```
+

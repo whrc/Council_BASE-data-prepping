@@ -1,0 +1,179 @@
+---
+title: "Council monthly averages" - Same as step 7 for making daily averages, but doing monthly averages (optional)
+output: html_document
+date: "2024-09-27"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+rm(list = ls())
+library(data.table)
+library(ggplot2)
+library(cowplot)
+library(openair)
+library(plotrix)
+library(signal)
+library(svMisc)
+library(zoo)
+library(stringr)
+library(plyr)
+library(viridis)
+library(lubridate)
+library(tidyverse)
+library(gridExtra)
+library(plotly)
+library(RColorBrewer)
+library(openair)
+```
+
+
+#read in cleaned and Ameriflux prepped half-hourly dataset
+```{r}
+df = fread(input = "C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/US-NGC2_HH_201701010000_202309010000.csv", na.strings="-9999") 
+           
+##na.strings = c('-9999','NA','NaN','NAN','-7999')
+
+
+```
+
+#Create useable timestamp variable 
+```{r}
+df$TIMESTAMP_END = as.character(df$TIMESTAMP_END)
+df$TIMESTAMP_START = as.character(df$TIMESTAMP_START)
+
+df$TIMESTAMP_END = as.POSIXct(df$TIMESTAMP_END, tz="UTC", format = "%Y%m%d%H%M")
+df$TIMESTAMP_START = as.POSIXct(df$TIMESTAMP_START, tz="UTC", format = "%Y%m%d%H%M")
+
+
+```
+
+#Create a new df for monthly averages 
+```{r}
+#using "date" instead of "day" in order to use the openAir and timeAverage packages/functions
+df$date = as.Date(df$TIMESTAMP_END)
+
+date = unique(df$date)
+df_avg = as.data.frame(date)
+```
+
+#Create FC_night 
+```{r}
+# Filter CO2 Flux data by incoming shortwave values 
+df <- df %>%
+  mutate(FC_night = ifelse(SW_IN <= 0, FC, NA))
+
+df <- df %>%
+  mutate(FC_night_F = ifelse(SW_IN <= 0, FC_F, NA))
+  
+```
+
+#Average by month 
+```{r}
+#Units are umol/m2/s for CO2, and nmol/m2/s for CH4
+library(openair)
+#average entire dataframe with tighter threshold 
+df_monthly_avg <- as.data.frame(date)
+df_monthly_avg <-timeAverage(df, avg.time = "month", data.thresh = 50)
+
+
+#average dataframe with lighter threshold to get good nighttime data coverage
+df_avg_night <- as.data.frame(date)
+df_avg_night <-timeAverage(df, avg.time = "month", data.thresh = 10)
+
+
+#add nighttime data back into the full dataset dataframe
+df_monthly_avg$FC_night = df_avg_night$FC_night
+df_monthly_avg$FC_night_F = df_avg_night$FC_night_F
+
+#Optionally, print the resulting dataframe with monthly averages to screen / make sure it looks ok 
+print(df_monthly_avg)
+
+
+```
+
+
+
+
+#Based on Dani's old code using a loop  
+
+```{r}
+# Step 1: Create the month column from TIMESTAMP_END
+# df$month = format(as.Date(df$TIMESTAMP_END), "%Y-%m")  # Extract month in YYYY-MM format
+
+# Create a dataframe with unique months
+# unique_months = unique(df$month)
+# df_monthly_avg = data.frame(month = unique_months, stringsAsFactors = FALSE)  # Initialize df_avg with unique months
+# 
+# # Step 2: Average by month to create monthly average dataframe
+# for (i in 1:ncol(df)) {
+#   if (class(df[[i]])[1] == 'numeric') {
+#     
+#     colname = colnames(df)[i]
+# 
+#     # Calculate monthly averages
+#     monthly_avg_val <- aggregate(df[[colname]] ~ month, data = df, FUN = mean, na.action = na.omit)
+#     
+#     # Rename the average column
+#     colnames(monthly_avg_val)[2] <- colname
+#     
+#     # Join the monthly averages to df_avg
+#     df_monthly_avg = left_join(df_monthly_avg, monthly_avg_val, by = 'month')
+#     
+#   } else {
+#     next
+#   }
+# }
+# 
+
+
+#print the resulting dataframe with monthly averages
+#print(df_monthly_avg)
+
+```
+
+
+#check out the averages to make sure they look ok
+
+```{r}
+
+
+plot(df_monthly_avg$date, df_monthly_avg$FC_F)
+plot(df_monthly_avg$date, df_monthly_avg$GPP_F)
+plot(df_monthly_avg$date, df_monthly_avg$RECO_F)
+plot(df_monthly_avg$date, df_monthly_avg$FC_night_F)
+
+plot(df_monthly_avg$TS_3_1_1, df_monthly_avg$FC_night_F)
+plot(df_monthly_avg$TS_3_1_1, df_monthly_avg$RECO_F)
+plot(df_monthly_avg$TS_3_1_1, df_monthly_avg$GPP_F)
+
+
+
+# ggplot(df_avg,aes(x=month,y=FC_F))+
+#   geom_point()
+# 
+# ggplot(df_avg,aes(x=month,y=GPP_F))+
+#   geom_point()
+# 
+# 
+# ggplot(df_avg,aes(x=month,y=RECO_F))+
+#   geom_point()
+
+
+```
+
+# Save Data
+
+```{r}
+
+write.csv(x = df_monthly_avg,file = './council_monthly_AVG_gapfilled_clean_2017_2023_for analysis.csv',quote = F,row.names = F)
+
+
+
+
+```
+
+
+

@@ -1,0 +1,359 @@
+---
+title: "1. Gapfilling Council from Kyle 7.16.2024" #Gapfill the met data for Council 
+#Here we combined our site data with the ERA5 data to check agreement, used the linear regression to adjust the ERA5 model to make it match even better, and now we are merging that back in with our dataset to use for gapfilling 
+output: html_document
+date: "2024-09-17"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = 'C:/Users/karndt.WHRC/Desktop/sites/YKD/Ameriflux YK/unburned/') #use this to set your directory or use the code in the next chunk to set working directory 
+```
+
+#Libraries & Data 
+```{r}
+rm(list = ls())
+
+library(data.table)
+library(ggplot2)
+library(zoo)
+library(cowplot)
+Sys.setenv(TZ = "UTC")
+
+#set working directory
+setwd("C:/Users/kkent/Documents/Council Data/Council BASE gapfilling")
+ 
+#double check working directory 
+getwd()
+
+#Load your "cleaned" met dataframe
+df = fread(input = "./councilbase_met_flux_clean_2017_2023.csv",na.strings = c('-9999'))#redoing with re-cleaned data from Dani 
+
+#making all columns numeric, they read in as.character, need to change to as.numeric to have functions work 
+df <- df %>%
+  mutate(across(where(is.character), as.numeric))
+
+```
+
+#Load Data and adjust timestamp to set up POSIXct
+```{r}
+#Breaks out the timing by yr, month, day, hour, min, sec, and sets 0 values to -9999
+
+#formatting the timestamp 
+year = substr(x = df$TIMESTAMP_END,start = 1,stop = 4)
+month = substr(x = df$TIMESTAMP_END,start = 5,stop = 6)
+day = substr(x = df$TIMESTAMP_END,start = 7,stop = 8)
+hour = substr(x = df$TIMESTAMP_END,start = 9,stop = 10)
+min = substr(x = df$TIMESTAMP_END,start = 11,stop = 12)
+
+date = paste(year,month,day,sep = '-')
+time = paste(hour,min,sep = ':')
+ts = paste(date,time,sep = ' ')
+
+df$ts = as.POSIXct(ts)
+
+#check timestamp - use a random range of dates to make sure the timestamp is correctly mapped. Here we map shortwave_incoming by day so you should see the diurnal pattern across days 
+ggplot(data = df)+
+  geom_point(aes(ts,SW_IN.c))+
+  scale_x_datetime(limits = as.POSIXct(c("2019-06-06","2019-06-10")))
+
+#remove duplicated time stamp rows
+df = df[!duplicated(df$ts),]
+```
+gap fill short gaps in the met data first
+```{r}
+#10.28.2024 - KK - added in ".c" behind re-cleaned met data from Dani
+
+gap = 3 #represents an hour and a half (3 30min sections), helps fill little data-logger gaps/issues
+
+#energy fluxes ###########################
+df$G_1_1_1.c = na.spline(df$G_1_1_1.c,maxgap = gap)
+
+#meteorology and weather #################################
+df$TA.c  = na.spline(df$TA.c,maxgap = gap)
+df$RH.c  = na.spline(df$RH.c,maxgap = gap)
+
+#Radiation #####################################
+df$LW_IN.c  = na.spline(df$LW_IN.c,maxgap = gap)
+df$LW_OUT.c = na.spline(df$LW_OUT.c,maxgap = gap)
+df$SW_IN.c  = na.spline(df$SW_IN.c,maxgap = gap)
+df$SW_OUT.c = na.spline(df$SW_OUT.c,maxgap = gap)
+
+df$NETRAD.c = na.spline(df$NETRAD.c,maxgap = gap)
+
+df$PPFD_IN.c = na.spline(df$PPFD_IN.c,maxgap = gap)
+df$PPFD_OUT.c = na.spline(df$PPFD_OUT.c,maxgap = gap)
+
+#Soil factors ###################################
+#all swc in %
+df$SWC_1_1_1.c = na.spline(df$SWC_1_1_1.c,maxgap = gap)
+df$SWC_2_1_1.c = na.spline(df$SWC_2_1_1.c,maxgap = gap)
+df$SWC_3_1_1.c = na.spline(df$SWC_3_1_1.c,maxgap = gap)
+
+#all soil temps deg C
+df$TS_1_1_1.c = na.spline(df$TS_1_1_1.c,maxgap = gap)
+df$TS_2_1_1.c = na.spline(df$TS_2_1_1.c,maxgap = gap)
+df$TS_3_1_1.c = na.spline(df$TS_3_1_1.c,maxgap = gap)
+df$TS_4_1_1.c = na.spline(df$TS_4_1_1.c,maxgap = gap)
+```
+
+#Save new file of the cleaned met data with minor gapfilling 
+```{r}
+write.csv(x = df,file = "./council_2016_2023.csv",row.names = F)
+```
+
+#Load in and Add ERA5 data
+```{r}
+#load the ERA5 df from step 0
+era = fread('./council_era5.csv')
+
+df$date = df$ts
+
+summary(era$date) #checking out the timestamps 
+
+#merge cleaned council met df and ERA5 df together
+all = merge(era,df,by = 'date',all = T)
+all = all[!duplicated(all$date),]
+```
+#Here we use linear models to make adjustments to the ERA5 data to make it better fit our actual site data and improve later gapfilling
+
+
+#checking data, and running linear regressions to be able to adjust the ERA5 data to better represent what data from the site is showing*
+#the linear reg applies an adjustment to the ERA5 data 
+#green data is overwriting the ERA5 pink data -- and we use that linear-reg-adjusted data to help fill in the site data as it's a better representation*
+
+#RH
+```{r}
+#lowercase variables come from ERA; upper-case from our cleaned council met dataset
+#KK 10.28.2024: added the ".c" to use re-cleaned data from Dani 
+
+rh.mod = lm(formula = all$RH.c ~ all$rh)
+summary(rh.mod)
+
+all$rh.eramod = all$rh*rh.mod$coefficients[2] + rh.mod$coefficients[1]   
+
+ggplot(data = all)+
+  geom_point(aes(date,rh,col='ERA5'))+
+  geom_point(aes(date,RH.c,col='Site'))
+
+ggplot(data = all,aes(rh,RH.c))+
+  geom_point()+
+  geom_smooth(method = 'lm')+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=2)
+```
+#AirT
+```{r}
+ggplot(data = all)+
+  geom_point(aes(date,airt,col='ERA5'))+
+  geom_point(aes(date,all$TA.c,col='Site'))
+
+airt.mod = lm(formula = all$TA.c ~ all$airt)
+summary(airt.mod)
+
+all$airt.eramod = all$airt*airt.mod$coefficients[2] + airt.mod$coefficients[1]     
+
+ggplot(data = all,aes(airt,TA.c))+theme_bw()+
+  geom_point()+
+  geom_smooth(method = 'lm')+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=2)
+```
+
+
+#SoilT
+```{r}
+ggplot(data = all)+
+  geom_point(aes(date,st1,col='ERA5.1'))+
+  geom_point(aes(date,st2,col='ERA5.2'))+
+  geom_point(aes(date,all$TS_1_1_1.c,col='Site1'))+
+  geom_point(aes(date,all$TS_2_1_1.c,col='Site2'))+
+  geom_point(aes(date,all$TS_3_1_1.c,col='Site3'))
+   geom_point(aes(date,all$TS_4_1_1.c,col='Site4'))
+   
+soilt.mod = lm(formula = all$TS_2_1_1.c ~ all$st2)
+all$tsoil.eramod = all$st2*soilt.mod$coefficients[2] + soilt.mod$coefficients[1]           
+
+ggplot(data = all)+
+  geom_point(aes(date,st2,col='ERA5'))+
+  geom_point(aes(date,TS_2_1_1.c,col='Site'))+
+  geom_point(aes(date,tsoil.eramod,col='Lin. Reg.'))
+```
+
+#Rg (SW-IN)
+```{r}
+# "rad" is from ERA5; SW-IN is from our re-cleaned data, so changed to SW-IN.c to use the re-cleaned data 
+
+ggplot(data = all)+
+  geom_point(aes(date,rad,col='ERA5'))+
+  geom_point(aes(date,all$SW_IN.c,col='Site'))
+
+ggplot(data = all)+
+  geom_point(aes(date,rad,col='ERA5'))+
+  geom_point(aes(date,SW_IN.c,col='Site'))+
+  scale_x_datetime(limits = as.POSIXct(c('2019-06-20','2019-07-1')))
+
+rad.mod = lm(formula = all$SW_IN.c ~ all$rad)
+summary(rad.mod)
+
+all$rad.eramod = all$rad*rad.mod$coefficients[2] + rad.mod$coefficients[1]   
+
+ggplot(data = all,aes(rad,SW_IN.c))+theme_bw()+
+  geom_point()+
+  geom_smooth(method = 'lm')+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=2)
+```
+
+#ws
+```{r}
+#WS not re-cleaned, so keeping the original WS variable  
+ggplot(data = all)+
+  geom_point(aes(date,ws,col='ERA5'))+
+  geom_point(aes(date,all$WS,col='Site'))
+
+ws.mod = lm(formula = all$WS ~ all$ws)
+summary(ws.mod)
+
+all$ws.eramod = all$ws*ws.mod$coefficients[2] + ws.mod$coefficients[1]    
+
+ggplot(data = all,aes(ws,WS))+theme_bw()+
+  geom_point()+
+  geom_smooth(method = 'lm')+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=2)
+```
+#Le
+```{r}
+#changed to LE.c to use re-cleaned data 
+ggplot(data = all)+
+  geom_point(aes(date,le,col='ERA5'))+
+  geom_point(aes(date,LE.c,col='Site'))
+
+le.mod = lm(formula = all$LE.c ~ all$le)
+summary(le.mod)
+
+all$le.eramod = all$le*le.mod$coefficients[2] + le.mod$coefficients[1]    
+
+ggplot(data = all,aes(le,LE.c))+theme_bw()+
+  geom_point()+
+  geom_smooth(method = 'lm')+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=2)
+```
+#H
+```{r}
+#changed to H.c to use re-cleaned data 
+ggplot(data = all)+
+  geom_point(aes(date,h,col='ERA5'))+
+  geom_point(aes(date,H.c,col='Site'))
+
+h.mod = lm(formula = all$H.c ~ all$h)
+summary(h.mod)
+
+all$h.eramod = all$h*h.mod$coefficients[2] + h.mod$coefficients[1]    
+
+ggplot(data = all,aes(h,H.c))+theme_bw()+
+  geom_point()+
+  geom_smooth(method = 'lm')+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=2)
+```
+
+
+```{r}
+#remove duplicated timestamp rows
+df = df[!duplicated(df$ts),]
+```
+
+
+```{r}
+#Added ".c" to cleaned data 
+
+#calculate VPD from air t and RH in ERA5 df
+svp = 610.7*10^((7.5*all$airt)/(237.3+all$airt))
+all$vpd.era = ((100 - all$rh)/100)*svp  
+
+#calculate VPD from air t and RH from cleaned council met df (with ".c" to use re-cleaned data)
+svp = 610.7*10^((7.5*all$TA.c)/(237.3+all$TA.c))
+all$vpd.site = ((100 - all$RH.c)/100)*svp 
+
+
+ta = ggplot(data = all,aes(airt,TA.c))+theme_bw()+
+  geom_point(alpha = 0.25)+
+  geom_smooth(method = 'lm')+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=2)+
+  scale_x_continuous(expression("ERA5 Air T. ("*degree*"C)"))+
+  scale_y_continuous(expression("Site Air T. ("*degree*"C)"))
+
+rh = ggplot(data = all,aes(rh,RH.c))+theme_bw()+
+  geom_point(alpha = 0.25)+
+  geom_smooth(method = 'lm')+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=2)+
+  scale_x_continuous(expression("ERA5 RH (%)"))+
+  scale_y_continuous(expression("Site RH (%)"))
+
+vpd = ggplot(data = all,aes(vpd.era,vpd.site))+theme_bw()+
+  geom_point(alpha = 0.25)+
+  geom_smooth(method = 'lm')+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=2)+
+  scale_x_continuous(expression("ERA5 VPD ("*Wm^-2*")"))+
+  scale_y_continuous(expression("Site VPD ("*Wm^-2*")"))
+
+st = ggplot(data = all,aes(st2,TS_2_1_1.c))+theme_bw()+
+    geom_point(alpha = 0.25)+
+    geom_smooth(method = 'lm')+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=2)+
+  scale_x_continuous(expression("ERA5 Soil T. ("*degree*"C)"))+
+  scale_y_continuous(expression("Site Soil T. ("*degree*"C)"))
+
+sw = ggplot(data = all,aes(rad,SW_IN.c))+theme_bw()+
+  geom_point(alpha = 0.25)+
+  geom_smooth(method = 'lm')+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=2)+
+  scale_x_continuous(expression("ERA5 SW ("*Wm^-2*")"))+
+  scale_y_continuous(expression("Site SW ("*Wm^-2*")"))
+
+ws = ggplot(data = all,aes(ws,WS))+theme_bw()+
+  geom_point(alpha = 0.25)+
+  geom_smooth(method = 'lm')+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=2)+
+  scale_x_continuous(expression("ERA5 WS ("*ms^-1*")"))+
+  scale_y_continuous(expression("Site WS ("*ms^-1*")"))
+
+le = ggplot(data = all,aes(le,LE.c))+theme_bw()+
+  geom_point(alpha = 0.25)+
+  geom_smooth(method = 'lm')+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=2)+
+  scale_x_continuous(expression("ERA5 LE ("*Wm^-2*")"))+
+  scale_y_continuous(expression("Site LE ("*Wm^-2*")"))
+
+h = ggplot(data = all,aes(h,H.c))+theme_bw()+
+  geom_point(alpha = 0.25)+
+  geom_smooth(method = 'lm')+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=2)+
+  scale_x_continuous(expression("ERA5 H ("*Wm^-2*")"))+
+  scale_y_continuous(expression("Site H ("*Wm^-2*")"))
+
+swc = ggplot(data = all,aes(vwc1*100,SWC_1_1_1.c))+theme_bw()+
+  geom_point(alpha = 0.25)+
+  geom_smooth(method = 'lm')+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=2)+
+  scale_x_continuous(expression("ERA5 VWC (%)"))+
+  scale_y_continuous(expression("Site VWC (%)"))
+
+#Plot agreement between ERA5 and site data 
+#png(filename = 'C:/Users/karndt.WHRC/Desktop/sites/YKD/plots/unburnedera5.png',width = 8,height = 8,units = 'in',res = 1500)
+plot_grid(ta,rh,vpd,st,sw,ws,le,h,swc)
+#dev.off()
+
+#All look decent except for SWC which clearly is having a rough time
+```
+#Select variables of interest from ERA5 / Reduce down to Council size; add adjusted ERA5 model to final data set
+```{r}
+#select the data / variables you want from the ERA5 instead of saving all
+eras = all[,c('date','rh.eramod','airt.eramod','ws.eramod','rad.eramod','tsoil.eramod','le.eramod','h.eramod')]
+
+df = df[!duplicated(df$date),] #delete duplicated dates
+df = merge(df,eras,by = 'date',all.x = T) #merge all of those ERA5 variables into our Council dataset 
+
+write.csv(x = df,file = './council_2016_2023_era.csv',row.names = F,quote = F)
+```
+
+
+
+

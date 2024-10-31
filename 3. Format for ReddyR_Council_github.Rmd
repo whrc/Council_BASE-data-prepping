@@ -1,0 +1,125 @@
+---
+title: "3. from kyle_Format for Reddy.R" 
+##For ReddyR, the file needs to be in a very specific format, so this code is taking our gap-filled file & preparing it for eddyproc processing - very little here should ever be changed among different sites / datasets
+#keep real data where there is real data, keep gap-filled data where there's gap-filled data
+#this prepares it for partitioning* (dividing out night and day fluxes, etc) 
+
+output: html_document
+date: "2024-09-17"
+
+
+#10.29.2024: note from KK, the NEE cutoff isn't working, so per Kyle's recc, excluding this step for now and running with data as is 
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Libraries and setting working directory 
+```{r}
+rm(list = ls())
+
+library(data.table)
+Sys.setenv(TZ='UTC')
+
+setwd('C:/Users/karndt.WHRC/Desktop/sites/council/data') #use this to set your directory
+```
+
+#Prep for Reddy for an initial gap filling
+#Load in gapfilled data from previous step 
+```{r}
+dat = fread('./council_2017_2023_gf.csv')
+```
+
+#Create useable time variables 
+```{r}
+dat$ts = as.POSIXct(dat$ts)
+
+Year = format(dat$ts,'%Y')
+DoY  = format(dat$ts,'%j')
+h    = as.numeric(format(dat$ts,'%H')) #full hours
+h.5  = as.numeric(ifelse(format(dat$ts,'%M') == '00',0,0.5)) #half hour decimals
+Hour = h+h.5 #Hour in the expected format
+
+#Added ".c" to use re-cleaned variables -- this code identifies NAs in Council data and inserts the gapfilling 
+dat$nee = ifelse(is.na(dat$FC.c),dat$rfnee,dat$FC.c)
+dat$ch4 = ifelse(is.na(dat$FCH4.c),dat$rfch4,dat$FCH4.c)
+```
+
+
+
+#Reddy df - creates df for Reddy
+```{r}
+#Changed to ".c" to use re-cleaned variables 
+reddy = data.frame(Year,DoY,Hour,
+                   dat$nee,
+                   dat$ch4,
+                   dat$H.c,#re-cleaned variable 
+                   dat$LE.c,#re-cleaned variable 
+                   dat$USTAR,
+                   dat$rad.eramod,
+                   dat$airt.eramod,
+                   dat$tsoil.eramod,
+                   dat$rh.eramod)
+names(reddy) = c('Year','DoY','Hour','NEE','CH4','H','LE','Ustar','Rg','Tair','Tsoil','RH')
+```
+
+
+#check the assumptions
+```{r}
+summary(reddy$Rg) #no negatives allowed  (SW_IN, can't be negative)
+summary(reddy$RH) #no values over 100 allowed (Relative humidity, can't be over 100%)
+
+#if these violate the constraints, run the chunk below to constrain
+```
+
+#run this chunk only if needed (if the variables violate the constraints per the code chunk above)
+```{r}
+#only run these if there are violations in the above chunk - otherwise, skip 
+reddy$Rg = reddy$Rg - min(reddy$Rg)
+reddy$Rg = ifelse(reddy$Rg < 0,0,reddy$Rg) #set negatives to 0
+reddy$RH = ifelse(reddy$RH > 100,100,reddy$RH)
+```
+
+
+#Further cleaning, if needed, so partitioning will work 
+#KK NOTE (10.29.'24): didn't work with 20, 15, 10, or 5 - so excluding this method for now 
+```{r}
+#Adding additional constraints to clean up the data a bit better / remove obvious outliers from previously plotted NEE in past and/or future steps. You may have to come back to this code if in following steps you notice model is over/underestimating or has many outliers. You may need to plot your NEE to find better guiderails for constraining data and come back to this step.  
+
+# experiment further cleaning to see if partitioning will work - constrain here and running partitioning code in step #4 to see if it works 
+reddy$NEE = ifelse(reddy$NEE < -15,NA,reddy$NEE) # was at -15 and 15, good place to start; but may require more tinkering 
+reddy$NEE = ifelse(reddy$NEE > 15,NA,reddy$NEE) 
+
+
+#KK note to self: constraining to -20/20, -15/15, -10/10, or -5/5, so excluding this step for now. Data will partition via a different method through this step. 
+```
+
+
+#add the second header row and resave as a txt
+```{r}
+h2 = c('--','--','--','umolm-2s-1','nmolm-2s-1','Wm-2','Wm-2','ms-1','Wm-2','DegC','DegC','%')
+names(h2) = names(reddy)
+h2 = as.character(h2)
+reddy2 = rbind(h2,reddy)
+reddy2$Year = as.character(reddy2$Year)
+reddy2$DoY  = as.character(reddy2$DoY)
+reddy2[1,1] = '--'
+reddy2[1,2] = '--'
+
+
+reddy2 = reddy2[complete.cases(reddy2$Year),]
+
+
+
+```
+
+#save new file
+```{r}
+write.table(x = reddy2,file = './reddy_council_2017_2023.txt',row.names = F,sep = '\t',quote = F,na = '-9999') 
+```
+
+
+
+
+

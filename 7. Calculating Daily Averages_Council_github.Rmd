@@ -1,0 +1,139 @@
+---
+title: "Council daily averages" #Some analyses need continuous data, so we calculate daily averages to better organize our visualization and to analyze 
+output: html_document
+date: "2024-09-27"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+rm(list = ls())
+library(data.table)
+library(ggplot2)
+library(cowplot)
+library(openair)
+library(plotrix)
+library(signal)
+library(svMisc)
+library(zoo)
+library(stringr)
+library(plyr)
+library(viridis)
+library(lubridate)
+library(tidyverse)
+library(gridExtra)
+library(plotly)
+library(RColorBrewer)
+library(openair)
+```
+
+
+#read in cleaned and Ameriflux prepped dataset
+```{r}
+df = fread(input = "C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/US-NGC2_HH_201701010000_202309010000.csv", na.strings="-9999") 
+
+
+##na.strings = c('-9999','NA','NaN','NAN','-7999')
+
+
+```
+
+#Create useable timestamp variable 
+```{r}
+df$TIMESTAMP_END = as.character(df$TIMESTAMP_END)
+df$TIMESTAMP_START = as.character(df$TIMESTAMP_START)
+
+df$TIMESTAMP_END = as.POSIXct(df$TIMESTAMP_END, tz="UTC", format = "%Y%m%d%H%M")
+df$TIMESTAMP_START = as.POSIXct(df$TIMESTAMP_START, tz="UTC", format = "%Y%m%d%H%M")
+
+
+```
+
+#Create a new df for daily averages 
+```{r}
+#using "date" instead of "day" in order to use the openAir and timeAverage packages/functions
+df$date = as.Date(df$TIMESTAMP_END)
+
+date = unique(df$date)
+df_avg = as.data.frame(date)
+```
+
+#Create FC_night in the half-hourly cleaned Ameriflux-prepped dataset from step 6
+```{r}
+# Filter CO2 Flux data by incoming shortwave values to get nighttime fluxes
+df <- df %>%
+  mutate(FC_night = ifelse(SW_IN <= 0, FC, NA)) #variable for not gapfilled
+
+df <- df %>%
+  mutate(FC_night_F = ifelse(SW_IN <= 0, FC_F, NA)) #variable for gapfilled 
+  
+```
+
+
+
+#Average by day to create continuous daily averages - NOTE: need to make sure to use "date" for openAir and timeAverage code to work*
+```{r}
+library(openair)
+#average entire dataframe with tighter data availability threshold to avoid using large data gaps in calculating the avg -- having at least 50% of the data 
+df_avg <- as.data.frame(date)
+df_avg <-timeAverage(df, avg.time = "day", data.thresh = 50)
+
+
+#average dataframe with lighter threshold to get better nighttime data coverage
+df_avg_night <- as.data.frame(date)
+df_avg_night <-timeAverage(df, avg.time = "day", data.thresh = 10)
+
+
+#add avg nighttime flux back into the dataset
+df_avg$FC_night = df_avg_night$FC_night
+df_avg$FC_night_F = df_avg_night$FC_night_F
+
+#From Dani's old code using "day" and a loop to create daily avgs
+## average variables by day to create daily average dataframe
+# for (i in 1:ncol(df)) {
+#   if (class(df[[i]])[1] == 'numeric'){
+# 
+#   colname = colnames(df)[i]
+# 
+#   daily_avg_val <- aggregate(df[[colname]] ~ day, data = df, FUN = mean, na.action=na.omit)
+# 
+#   colnames(daily_avg_val)[2] <- colname
+# 
+# df_avg = left_join(df_avg, daily_avg_val, by='day')
+# 
+#   }
+#   else{
+#     next
+#   }
+# }
+
+
+```
+
+
+#check out the averages to make sure they look reasonable / screen 
+
+```{r}
+
+plot(df_avg$date, df_avg$FC_F)
+plot(df_avg$date, df_avg$GPP_F)
+plot(df_avg$date, df_avg$RECO)
+plot(df_avg$date, df_avg$FC_night_F)
+
+plot(df_avg$TS_3_1_1, df_avg$FC_night_F)
+
+```
+
+# Save Data
+
+```{r}
+#these dataframes now include FC_night and FC_night_F 
+
+#half-hourly df with night fluxes 
+write.csv(x = df,file = './council_gapfilled_clean_2017_2023_for analysis.csv',quote = F,row.names = F)
+#daily avg df with night fluxes 
+write.csv(x = df_avg,file = './council_AVG_gapfilled_clean_2017_2023_for analysis.csv',quote = F,row.names = F)
+
+```

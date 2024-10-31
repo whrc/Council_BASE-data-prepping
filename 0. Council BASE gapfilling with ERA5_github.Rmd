@@ -1,0 +1,207 @@
+---
+title: "Council BASE gapfilling with ERA5 with Kyle" #Here we are prepping the ERA5 model to use for gapfilling in the Ameriflux BASE dataset. EAR5 is hourly, so we break it into half-hourly increments to match that of Ameriflux, and we gapfill those half-hours so we have a continuous dataset to be able to fill in the gaps within the BASE Ameriflux dataset. (Might be slightly different it you're using the Ameriflux Fullset dataset*)
+output: html_document
+date: "2024-09-16"
+---
+
+#Notes: ERA5 is a climate model we use to gap-fill -- we use GoogleEarth Engine to download the maps for our specific location (see Kyle about this / Kyle will teach us and share the code for that later). We need to reformat the ERA5 model data so it matches well with the Ameriflux datafile so we can use it to gapfill in later steps. 
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+rm(list = ls())
+
+library(data.table)
+library(ggplot2)
+library(cowplot)
+library(openair)
+library(plotrix)
+library(signal)
+library(svMisc)
+library(zoo)
+library(stringr)
+library(plyr)
+library(viridis)
+library(lubridate)
+library(tidyverse)
+library(gridExtra)
+library(plotly)
+library(RColorBrewer)
+library(pracma)
+
+Sys.setenv(TZ = "UTC")
+
+```
+
+#Set working directory and check working directory is correct
+```{r}
+#edit to your working directory 
+
+setwd("~/Council Data/Council BASE gapfilling") 
+
+ 
+getwd()
+```
+
+#Load packages/libraries needed
+
+```{r}
+
+rm(list = ls()) #clears environment 
+
+library(data.table)
+library(ggplot2)
+library(dplyr)
+library(zoo)
+```
+
+
+#Read in the full ERA5 dataset, which is the ERA5 hourly datatset for Council from 2016 - 2023 (these years match the datatset we aim to gapfill)
+
+```{r}
+#Kyle uses Google Earth Engine and code from Anna Virkkala to pull weather data from our site's coordinates -- he will teach us / post the code later on. For now, he pulled and compiled the ERA5 data for us. 
+
+#ERA5 df used for gapfilling 2016 - 2023, hourly
+era = fread("C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/ERA5hourly_2016_2023_Council.csv")
+names(era)
+
+#make ERA5 column names more R friendly names
+names(era) = c('index','date','dew','id','st1','st2','le','pres','h','rad','airt','ppt','u','v','vwc1','vwc2', 'geo')
+
+```
+
+#Adjust to the timezone of interest (confirm ERA5 dataset is listed in UTC before this step, they usually are)
+```{r}
+era$date
+tz = -9 #number of hours Alaskan time is from from UTC  (Can be -9 or -8 depending on where in AK you are)
+era$date = era$date+(tz*60*60)
+```
+
+
+#subset the ERA5 df down to time range of interest
+
+```{r}
+#subsetting timeframe to 1/1/2017 - 9/1/2023, to match the Ameriflux BASE dataset or whichever dataset you're working with 
+
+era = subset(era,era$date >= as.POSIXct('2016-12-31 00:00',tz='UTC')) #greater than this date
+era = subset(era,era$date <= as.POSIXct('2023-09-02 00:00',tz='UTC')) #less than this date
+```
+
+
+#convert temps from K to deg C
+
+```{r}
+era$airt  = era$airt-273.15
+era$dew   = era$dew-273.15
+era$st1 = era$st1-273.15
+era$st2 = era$st2-273.15
+```
+
+##"make negatives NAs so we can fill them using linear interpolation." <--(This was a note in Kyle's code but it was above the converting units chunk -- need to ask if this was deleted / not used anymore)
+
+#Convert the ERA5 units from Joules / m2 to W/m2
+
+```{r}
+era$rad = era$rad/3600 #convert radiation from J m-2 to Wm-2, divide by seconds in an hour
+
+#Some datasets you may also need to convert h and le too, make sure to check the starting units 
+
+#In the Council dataset these parameters (le and h) were flipped around, so we used -36000
+
+era$le = era$le/-3600 #convert from J m-2 to Wm-2, divide by seconds in an hour
+era$h = era$h/-3600 #convert from J m-2 to Wm-2, divide by seconds in an hour
+
+```
+
+
+#caluclate rh from the dewpoint and temperature
+
+```{r}
+era$rh = 100*(exp((17.625*era$dew)/(243.04+era$dew))/exp((17.625*era$airt)/(243.04+era$airt)))
+```
+
+
+#create windspeed from u and v
+
+```{r}
+#pythagorean theorem, middle vector = wind speed
+era$ws = sqrt(era$v^2 + era$u^2)
+```
+
+
+#create a date data frame with every half hour in the timeframe of interest
+
+```{r}
+#sequence of half hourly time
+date = seq(from = as.POSIXct('2016-12-31 00:00',tz='UTC'),
+           to = as.POSIXct('2023-09-02 00:00',tz='UTC'),
+           by = 60*30)
+datedf = as.data.frame(date)
+
+```
+
+
+#merge with era 5
+```{r}
+#created a df with the date file and merge it with ERA5 now 
+eram = merge(datedf,era,by = 'date',all = T)
+```
+
+
+#gapfill middle half hours - creates dataset of half hours from the hourly ERA5 dataset
+
+```{r}
+# "maxgap = 1" = 30 min
+
+eram$dew   = na.approx(object = eram$dew,maxgap = 1)
+eram$rh   = na.approx(object = eram$rh,maxgap = 1)
+eram$st1   = na.approx(object = eram$st2,maxgap = 1)
+eram$st2   = na.approx(object = eram$st2,maxgap = 1)
+eram$rad   = na.approx(object = eram$rad,maxgap = 1)
+eram$ppt   = na.approx(object = eram$ppt,maxgap = 1)
+eram$pres   = na.approx(object = eram$pres,maxgap = 1)
+eram$airt  = na.approx(object = eram$airt,maxgap = 1)
+eram$vwc1   = na.approx(object = eram$vwc1,maxgap = 1)
+eram$vwc2   = na.approx(object = eram$vwc2,maxgap = 1)
+eram$ws   = na.approx(object = eram$ws,maxgap = 1)
+eram$le   = na.approx(object = eram$le,maxgap = 1)
+eram$h   = na.approx(object = eram$h,maxgap = 1)
+```
+
+
+
+#check out the data to make sure it looks okay - want to patterns we expect (like air temp inc and dec within each year, etc)
+```{r}
+ggplot(data = eram)+theme_bw()+geom_hline(yintercept = 0)+
+  geom_point(aes(date,airt,col='airT'))+
+  geom_point(aes(date,st1,col='soilT1'))+
+  geom_point(aes(date,st2,col='soilT2'))
+
+ggplot(data = eram)+theme_bw()+geom_hline(yintercept = 0)+
+  geom_point(aes(date,rad))
+
+ggplot(data = eram)+theme_bw()+geom_hline(yintercept = 0)+
+  geom_point(aes(date,vwc1,col='vwc1'))+
+  geom_point(aes(date,vwc2,col='vwc2'))
+  
+ggplot(data = eram)+theme_bw()+geom_hline(yintercept = 0)+
+  geom_point(aes(date,rh))
+
+ggplot(data = eram)+theme_bw()+
+  geom_point(aes(date,pres))
+
+ggplot(data = eram)+theme_bw()+geom_hline(yintercept = 0)+
+  geom_point(aes(date,ws))
+```
+  
+#Save new file of the half-hourly ERA5 data to use for gapfilling in next steps 
+
+```{r}
+write.csv(x = eram,file = '~/Council Data/Council BASE gapfilling./council_era5.csv',row.names = F)
+```
+
+
+

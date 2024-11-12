@@ -29,8 +29,8 @@ Sys.setenv(TZ='UTC')
 
 #Load in site data
 ```{r,error=FALSE,warning=FALSE}
-
-cf = fread('./council_2016_2023_era.csv') #using the re-cleaned df from Dani 
+cf = fread("C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_2016_2023_era.csv")
+#cf = fread('./council_2016_2023_era.csv') #using the re-cleaned df from Dani 
 cf = cf[complete.cases(cf$airt.eramod),]
 
 #create a sub data frame of the variables you want for a neural network (random forest)
@@ -166,13 +166,15 @@ councilnee
 set.seed(123)
 cc = ncf[complete.cases(ncf$fch4),]
 
-#boruta = Boruta(fch4 ~ tair + rh + rg + ws + tsoil + swc + vpd + le + h,data = cc,doTrace = 2,maxRuns = 100)
-#plot(boruta,las = 2)
+boruta = Boruta(fch4 ~ tair + rh + rg + ws + tsoil + swc + vpd + le + h,data = cc,doTrace = 2,maxRuns = 100)
+plot(boruta,las = 2)
 ```
 
 
-#try random forest for CH4
+#try random forest for CH4 
 ```{r,error=FALSE,warning=FALSE}
+#KK edit 11.12.2024 - adding trees to see if the model can constrain winter CH4 better
+
 #use 80% of data set as training set and 20% as test set, expanded to try to represent the larger points better
 
 #cc = subset(cc,cc$fch4 < 0.2) #this was kyle trying to get rid of bursts he saw in other datasets that were artificially creating outliers
@@ -192,7 +194,8 @@ summary(cc$fch4)
 summary(train.ch4$fch4)
 summary(test.ch4$fch4)
 
-rfch4 = randomForest(formula = fch4 ~ tair + rh + rg + ws + tsoil + vpd + swc + h + le,data = train.ch4,ntree = 100)
+rfch4 = randomForest(formula = fch4 ~ tair + rh + rg + ws + tsoil + vpd + swc + h + le,data = train.ch4,ntree = 150)
+#ntree set at 100 before --> trying 150, and 200 (200 was very similar to 150, trying 300 & 1000 --> no real noticeable improvement after 150 or 300)
 
 pch4 = predict(object = rfch4,newdata = ncf)
 
@@ -213,7 +216,31 @@ ggplot(data = cf)+theme_bw()+
 ggplot(data = cf)+theme_bw()+
   geom_point(aes(date,rfch4,col='RF'),alpha=0.5)+
   geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
+  scale_x_datetime(limits = as.POSIXct(c("2017-01-01","2017-12-30")))
+ # scale_y_continuous(limits = c(-0.05,0.05))
+
+ggplot(data = cf)+theme_bw()+
+  geom_point(aes(date,rfch4,col='RF'),alpha=0.5)+
+  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
+  scale_x_datetime(limits = as.POSIXct(c("2018-01-01","2018-12-30")))
+ # scale_y_continuous(limits = c(-0.05,0.05))
+
+ggplot(data = cf)+theme_bw()+
+  geom_point(aes(date,rfch4,col='RF'),alpha=0.5)+
+  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
   scale_x_datetime(limits = as.POSIXct(c("2019-01-01","2019-12-30")))
+ # scale_y_continuous(limits = c(-0.05,0.05))
+
+ggplot(data = cf)+theme_bw()+
+  geom_point(aes(date,rfch4,col='RF'),alpha=0.5)+
+  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
+  scale_x_datetime(limits = as.POSIXct(c("2020-01-01","2020-12-30")))
+ # scale_y_continuous(limits = c(-0.05,0.05))
+
+ggplot(data = cf)+theme_bw()+
+  geom_point(aes(date,rfch4,col='RF'),alpha=0.5)+
+  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
+  scale_x_datetime(limits = as.POSIXct(c("2021-01-01","2021-12-30")))
  # scale_y_continuous(limits = c(-0.05,0.05))
 
 ggplot(data = cf)+theme_bw()+
@@ -221,6 +248,14 @@ ggplot(data = cf)+theme_bw()+
   geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
   scale_x_datetime(limits = as.POSIXct(c("2022-01-01","2022-12-30")))
  # scale_y_continuous(limits = c(-0.05,0.05))
+
+
+ggplot(data = cf)+theme_bw()+
+  geom_point(aes(date,rfch4,col='RF'),alpha=0.5)+
+  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
+  scale_x_datetime(limits = as.POSIXct(c("2023-01-01","2023-12-30")))
+ # scale_y_continuous(limits = c(-0.05,0.05))
+
 
 ggplot(data = cf)+theme_bw()+
   geom_point(aes(date,rfch4,col='RF'),alpha=0.2)+
@@ -263,5 +298,6 @@ plot_grid(councilnee,councilch4)
 #Save the gapfilled data 
 ```{r,error=FALSE,warning=FALSE}
 write.csv(x = cf,file = "./council_2017_2023_gf.csv",row.names = F) #_gf to indicate it's been gapfilled 
+write.csv(x= cf, file = "C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_2017_2023_gf.csv")
 ```
 

@@ -1,0 +1,160 @@
+---
+title: "ERA5 WindDir" #Using v and u component from ERA5 (m/s) to translare to 0-360 degrees, and assigning 0-360 degress in both df to a N, E, S, W cardinal coordinates --> then need to use this adj dataset to run back through step 1 of the processing for gapfilling etc
+output: html_document
+date: "2024-11-25"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Libraries
+```{r}
+rm(list = ls())
+
+library(data.table)
+library(ggplot2)
+library(zoo)
+library(cowplot)
+library(openair)
+Sys.setenv(TZ = "UTC")
+
+#set working directory
+#setwd("C:/Users/kkent/Documents/Council Data/Council BASE gapfilling")
+ 
+#double check working directory 
+getwd()
+```
+
+#Load BASE data df from step 1
+```{r}
+df = fread(input = "./council_2016_2023.csv",na.strings = c('-9999'))#redoing with re-cleaned data 
+
+```
+
+
+ERA5 data
+```{r}
+#setwd('C:/Users/karndt.WHRC/Desktop/sites/council/data/')
+era = fread('./council_era5.csv')
+
+df$date = df$ts
+
+summary(era$date)
+summary(df$TIMESTAMP)
+
+#merge together
+# all = merge(era,df,by = 'date',all = T)
+# all = all[!duplicated(all$date),]
+```
+
+
+
+#Wind direction from ERA5 from u and v component to 0-360
+```{r}
+#transform u and v component to 0-360 degrees in ERA5 data 
+
+#make sure u and v are numeric within the ERA dataset 
+
+
+windDir <-function(u,v){
+  (270-atan2(u,v)*180/pi)%%360 
+}
+
+
+#WDIR= (270-atan2(V,U)*180/pi)%360
+
+#ERA already has windspeed as ws
+
+
+#needs to be saved as ws and wd for openair to work - this converts the u and v compoenents to 0-360 degrees 
+era$wd <-windDir(era$u,era$v)
+
+#in BASE data, it's WS and WD, need to make ws and wd, and make numeric 
+df[, 14:15] <- lapply(df[, 14:15], as.numeric)
+library(dplyr)
+# Rename specific columns
+df <- df %>%
+  rename(wd = WD, ws = WS)
+
+
+
+library(openair)
+# type = "month" shows windrose by month 
+
+windRose(era, type = "year") # 50% calm due to the half hourly gaps in the ERA data -- need to perform short period gapfilling on this 
+windRose(df, type = "year")
+
+#"calm" means a period of time where there is no wind detected / there is still air 
+
+#filtering to look at certain months of certain years 
+# Assuming your dataframe has a date column named 'date'
+df_filtered <- df %>%
+  filter(date >= as.Date("2019-06-01") & date <= as.Date("2019-07-01"))
+
+era_filtered <- era %>%
+  filter(date >= as.Date("2019-06-01") & date <= as.Date("2019-07-01"))
+
+
+# Create the windrose for the filtered data
+windRose(df_filtered)
+windRose(era_filtered)
+
+```
+#checking cals using another method 
+```{r}
+# Calculate wind direction in degrees
+
+era2 = fread('./council_era5.csv')
+
+
+era2$wd <- (270-atan2(era2$u, era2$v) * 180 / pi + 360) %% 360
+
+
+era2_filtered <- era2 %>%
+  filter(date >= as.Date("2019-06-01") & date <= as.Date("2019-07-01"))
+
+# Create the windrose for the filtered data - checking against the other way to calc 
+windRose(df_filtered)
+windRose(era_filtered)
+windRose(era2_filtered)
+#era1 and era2 match, feel pretty confident the conversion is correct. But, it does deviate quite a bit from the actual data from the BASE df...
+```
+#Waiting on this step for now....
+
+#Assigning cardinal directions to 0-360
+```{r}
+#(0=north,90=east,180=south,270=west) that the wind is coming from
+# northerly wind is 0°, an easterly wind is 90°, a southerly wind is 180°, and a westerly wind is 270°
+
+# Function to assign cardinal directions
+get_cardinal_direction <- function(degree) {
+  if (degree >= 337.5 | degree < 22.5) {
+    return("N")
+  } else if (degree >= 22.5 & degree < 67.5) {
+    return("NE")
+  } else if (degree >= 67.5 & degree < 112.5) {
+    return("E")
+  } else if (degree >= 112.5 & degree < 157.5) {
+    return("SE")
+  } else if (degree >= 157.5 & degree < 202.5) {
+    return("S")
+  } else if (degree >= 202.5 & degree < 247.5) {
+    return("SW")
+  } else if (degree >= 247.5 & degree < 292.5) {
+    return("W")
+  } else if (degree >= 292.5 & degree < 337.5) {
+    return("NW")
+  }
+}
+
+# assign cardinal directions
+era$cardinal_direction <- sapply(era$wd, get_cardinal_direction)
+
+
+
+
+```
+
+
+

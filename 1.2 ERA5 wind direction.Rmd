@@ -1,5 +1,10 @@
 ---
-title: "ERA5 WindDir" #Using v and u component from ERA5 (m/s) to translate to 0-360 degrees, and assigning 0-360 degress in both df to a N, E, S, W cardinal coordinates --> then need to use this adj dataset to run back through step 1 of the processing for gapfilling etc
+title: "ERA5 WindDir" #Using v and u component from ERA5 (m/s) to translate to 0-360 degrees, and assigning 0-360 degress in both df to a N, E, S, W cardinal coordinates --> testing here, then will add to processing steps 0 and 1 to incorporate the wd in degrees (BASE data has wind direction in 0-360, so this seems the best approach to merge with BASE data)
+
+
+#( u ) Component: This is the east-west component of the wind. Positive ( u ) values indicate wind blowing from the west towards the east, while negative ( u ) values indicate wind blowing from the east towards the west.
+#( v ) Component: This is the north-south component of the wind. Positive ( v ) values indicate wind blowing from the south towards the north, while negative ( v ) values indicate wind blowing from the north towards the south.
+
 output: html_document
 date: "2024-11-25"
 ---
@@ -114,18 +119,17 @@ windRose(era2_filtered)
 #Checking ERA5 vs BASE wind direction data 
 ```{r}
 
-df$date = df$ts
+#df$date = df$ts
 
 #merge together
 all = merge(era,df,by = 'date',all = T)
 all = all[!duplicated(all$date),]
 
 
-
-all$date = as.character(all$date)
-
-
-all$date= as.POSIXct(all$date, tz="UTC", format = "%Y%m%d%H%M")
+# 
+# all$date = as.character(all$date)
+# 
+# all$date= as.POSIXct(all$date, tz="UTC", format = "%Y%m%d%H%M")
 
 
 
@@ -180,9 +184,59 @@ get_cardinal_direction <- function(degree) {
 era$cardinal_direction <- sapply(era$wd, get_cardinal_direction)
 
 
+#another way: assigning cardinal directions to wind direction in degrees using conditional logic to map ranges of degrees (e.g., 0–360) to specific directions (N, NE, E, etc.). 
 
+
+library(dplyr)
+
+# Assign cardinal directions based on wind direction in degrees
+era <- era %>%
+  mutate(
+    wind_direction_cardinal = case_when(
+      wd >= 337.5 | wd < 22.5  ~ "North",
+      wd >= 22.5 & wd < 67.5  ~ "North-East",
+      wd >= 67.5 & wd < 112.5 ~ "East",
+      wd >= 112.5 & wd < 157.5 ~ "South-East",
+      wd >= 157.5 & wd < 202.5 ~ "South",
+      wd >= 202.5 & wd < 247.5 ~ "South-West",
+      wd >= 247.5 & wd < 292.5 ~ "West",
+      wd >= 292.5 & wd < 337.5 ~ "North-West",
+      #TRUE ~ NA_character_ # Handle any missing or invalid values -- not needed in this case 
+    )
+  )
+#checking to see if NA values 
+sum(is.na(era$wd)) #no NA
 
 ```
 
+#assigning cardinal directions based only on u and v 
+##Have Kyle look at this - doesn't match up with the cardinal directions from the code chunks above **
 
+```{r}
+
+#(0=north,90=east,180=south,270=west) that the wind is coming from
+#A positive U wind comes from the west, and a negative U wind comes from the east. The V wind component is parallel to the y- axis (i.e. latitude). A positive V wind comes from the south, and a negative V wind comes from the north.
+
+#something is not right -- it doesn't match up with results from the 0-360 degrees
+
+library(dplyr)
+
+# Assign cardinal directions based on u and v components
+era <- era %>%
+  mutate(
+    wind_direction = case_when(
+      u > 0 & v > 0 ~ "SW",  # Positive u and v (wind coming from SW)
+      u > 0 & v < 0 ~ "NW",  # Positive u, negative v (wind coming from NW)
+      u < 0 & v > 0 ~ "SE",  # Negative u, positive v (wind coming from SE)
+      u < 0 & v < 0 ~ "NE",  # Negative u and v (wind coming from NE)
+      u == 0 & v > 0 ~ "S",      # u is 0, v positive (from South)
+      u == 0 & v < 0 ~ "N",      # u is 0, v negative (from North)
+      u > 0 & v == 0 ~ "W",       # u positive, v is 0 (from West)
+      u < 0 & v == 0 ~ "E",       # u negative, v is 0 (from East)
+      TRUE ~ "Calm"                  # Default case for u = 0 and v = 0
+    )
+  )
+
+
+```
 

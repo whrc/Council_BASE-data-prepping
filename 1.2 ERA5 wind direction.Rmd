@@ -1,5 +1,5 @@
 ---
-title: "ERA5 WindDir" #Using v and u component from ERA5 (m/s) to translare to 0-360 degrees, and assigning 0-360 degress in both df to a N, E, S, W cardinal coordinates --> then need to use this adj dataset to run back through step 1 of the processing for gapfilling etc
+title: "ERA5 WindDir" #Using v and u component from ERA5 (m/s) to translate to 0-360 degrees, and assigning 0-360 degress in both df to a N, E, S, W cardinal coordinates --> then need to use this adj dataset to run back through step 1 of the processing for gapfilling etc
 output: html_document
 date: "2024-11-25"
 ---

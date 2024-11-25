@@ -28,7 +28,7 @@ getwd()
 
 #Load BASE data df from step 1
 ```{r}
-df = fread(input = "./council_2016_2023.csv",na.strings = c('-9999'))#redoing with re-cleaned data 
+df = fread(input = "C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_2016_2023.csv",na.strings = c('-9999'))#redoing with re-cleaned data 
 
 ```
 
@@ -36,12 +36,13 @@ df = fread(input = "./council_2016_2023.csv",na.strings = c('-9999'))#redoing wi
 ERA5 data
 ```{r}
 #setwd('C:/Users/karndt.WHRC/Desktop/sites/council/data/')
-era = fread('./council_era5.csv')
+era = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_era5.csv')
 
 df$date = df$ts
 
 summary(era$date)
 summary(df$TIMESTAMP)
+
 
 #merge together
 # all = merge(era,df,by = 'date',all = T)
@@ -88,18 +89,6 @@ windRose(df, type = "year")
 
 #"calm" means a period of time where there is no wind detected / there is still air 
 
-#filtering to look at certain months of certain years 
-# Assuming your dataframe has a date column named 'date'
-df_filtered <- df %>%
-  filter(date >= as.Date("2019-06-01") & date <= as.Date("2019-07-01"))
-
-era_filtered <- era %>%
-  filter(date >= as.Date("2019-06-01") & date <= as.Date("2019-07-01"))
-
-
-# Create the windrose for the filtered data
-windRose(df_filtered)
-windRose(era_filtered)
 
 ```
 
@@ -107,7 +96,7 @@ windRose(era_filtered)
 ```{r}
 # Calculate wind direction in degrees
 
-era2 = fread('./council_era5.csv')
+era2 = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling//council_era5.csv')
 
 
 era2$wd <- (270-atan2(era2$u, era2$v) * 180 / pi + 360) %% 360
@@ -122,6 +111,42 @@ windRose(era_filtered)
 windRose(era2_filtered)
 #era1 and era2 match, feel pretty confident the conversion is correct. But, it does deviate quite a bit from the actual data from the BASE df...*Ask Kyle about thoughts on this, whether to proceed to the step 1 gapfilling etc to prep it to being incorporated into RF 
 ```
+#Checking ERA5 vs BASE wind direction data 
+```{r}
+
+df$date = df$ts
+
+#merge together
+all = merge(era,df,by = 'date',all = T)
+all = all[!duplicated(all$date),]
+
+
+
+all$date = as.character(all$date)
+
+
+all$date= as.POSIXct(all$date, tz="UTC", format = "%Y%m%d%H%M")
+
+
+
+library(ggplot2)
+
+# Plotting the data
+ggplot() +
+  # First dataset (df_filtered)
+  geom_point(data = all, aes(x = date, y = wd.x), color = "blue", size = 1) + #ERA data, hourly
+  # Second dataset (era_filtered)
+  geom_point(data = all, aes(x = date, y = wd.y), color = "red", size = 1) + #BASE data, not gapfilled
+  scale_x_datetime(limits = as.POSIXct(c('2019-06-01','2019-07-01')))+
+  # Adding labels and theme
+  labs(title = "Comparison of Wind Direction - blue = ERA5, red = BASE",
+       x = "Date",
+       y = "Wind Direction (0-360 degrees)",
+       color = "Dataset") +
+  theme_minimal()
+
+```
+#Need to do: merge the datasets properly, assign cardinal directions, include wd in the ERA5 dataset saved
 
 #Waiting on this step for now....
 

@@ -233,9 +233,30 @@ era <- era %>%
       u == 0 & v < 0 ~ "N",      # u is 0, v negative (from North)
       u > 0 & v == 0 ~ "W",       # u positive, v is 0 (from West)
       u < 0 & v == 0 ~ "E",       # u negative, v is 0 (from East)
-      TRUE ~ "Calm"                  # Default case for u = 0 and v = 0
+      TRUE ~ "Calm"                  # when u = 0 and v = 0
     )
   )
+
+#Testing the calcs to see why they disagree - found several versions online, all three claim to show direction wind is coming from but have opposing results 
+
+#example data:
+# -2.463795335 u --> comes from east 
+# 5.8896788  v --> comes from s --> should be a SW wind 
+
+#from NSF you can use either of these two equations where DperR = (180/pi):
+          #Dirgeo = atan2(-U,-V) * DperR 
+                # = 270 - (atan2(V,U) * DperR)
+
+#but looking at the ex below in test1 and test3, these two ways give us very different results 
+
+wind_direction_test1 <- (atan2(-(-2.463795335), -(5.8896788)) * 180 / pi) %% 360 #where equation has -(u) and -(v), from NSF pg
+wind_direction_test2 <- (270-atan2(-(-2.463795335), -(5.8896788)) * 180 / pi) %% 360 #where equation has 270 - atan with -(u) and -(v)
+wind_direction_test3 <- (270-atan2(-2.463795335, 5.8896788) * 180 / pi) %% 360 #equation from the atmo github & NSF pg, with 270 - atan.... u, v 
+
+
+print(wind_direction_test1) #157 degrees  --> S/SE --> online wind direction calculator agrees with this 
+print(wind_direction_test2) #112 degrees --> E/SE 
+print(wind_direction_test3) #292 degrees --> W/NW --> opposite....but both claim to be using "direction wind is blowing from"...
 
 
 ```

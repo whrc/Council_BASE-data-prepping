@@ -56,6 +56,7 @@ summary(df$TIMESTAMP)
 
 #make sure u and v are numeric within the ERA dataset 
 
+#- this converts the u and v components to 0-360 degrees 
 
 windDir <-function(u,v){
   (270-atan2(u,v)*180/pi)%%360 
@@ -64,10 +65,10 @@ windDir <-function(u,v){
 
 #WDIR= (270-atan2(V,U)*180/pi)%360
 
-#ERA already has windspeed as ws
+#ERA already has windspeed
 
 
-#needs to be saved as ws and wd for openair to work - this converts the u and v compoenents to 0-360 degrees 
+#needs to be saved as ws and wd for openair to work 
 era$wd <-windDir(era$u,era$v)
 
 #in BASE data, it's WS and WD, need to make ws and wd, and make numeric 
@@ -101,7 +102,8 @@ windRose(df_filtered)
 windRose(era_filtered)
 
 ```
-#checking cals using another method 
+
+#checking calcs using slightly diff code specific to era df  
 ```{r}
 # Calculate wind direction in degrees
 
@@ -118,8 +120,9 @@ era2_filtered <- era2 %>%
 windRose(df_filtered)
 windRose(era_filtered)
 windRose(era2_filtered)
-#era1 and era2 match, feel pretty confident the conversion is correct. But, it does deviate quite a bit from the actual data from the BASE df...
+#era1 and era2 match, feel pretty confident the conversion is correct. But, it does deviate quite a bit from the actual data from the BASE df...*Ask Kyle about thoughts on this, whether to proceed to the step 1 gapfilling etc to prep it to being incorporated into RF 
 ```
+
 #Waiting on this step for now....
 
 #Assigning cardinal directions to 0-360

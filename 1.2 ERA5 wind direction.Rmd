@@ -1,0 +1,263 @@
+---
+title: "ERA5 WindDir" #Using v and u component from ERA5 (m/s) to translate to 0-360 degrees, and assigning 0-360 degress in both df to a N, E, S, W cardinal coordinates --> testing here, then will add to processing steps 0 and 1 to incorporate the wd in degrees (BASE data has wind direction in 0-360, so this seems the best approach to merge with BASE data)
+
+
+#( u ) Component: This is the east-west component of the wind. Positive ( u ) values indicate wind blowing from the west towards the east, while negative ( u ) values indicate wind blowing from the east towards the west.
+#( v ) Component: This is the north-south component of the wind. Positive ( v ) values indicate wind blowing from the south towards the north, while negative ( v ) values indicate wind blowing from the north towards the south.
+
+output: html_document
+date: "2024-11-25"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Libraries
+```{r}
+rm(list = ls())
+
+library(data.table)
+library(ggplot2)
+library(zoo)
+library(cowplot)
+library(openair)
+Sys.setenv(TZ = "UTC")
+
+#set working directory
+#setwd("C:/Users/kkent/Documents/Council Data/Council BASE gapfilling")
+ 
+#double check working directory 
+getwd()
+```
+
+#Load BASE data df from step 1
+```{r}
+df = fread(input = "C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_2016_2023.csv",na.strings = c('-9999'))#redoing with re-cleaned data 
+
+```
+
+
+ERA5 data
+```{r}
+#setwd('C:/Users/karndt.WHRC/Desktop/sites/council/data/')
+era = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_era5.csv')
+
+df$date = df$ts
+
+summary(era$date)
+summary(df$TIMESTAMP)
+
+
+#merge together
+# all = merge(era,df,by = 'date',all = T)
+# all = all[!duplicated(all$date),]
+```
+
+
+
+#Wind direction from ERA5 from u and v component to 0-360
+```{r}
+#transform u and v component to 0-360 degrees in ERA5 data 
+
+#make sure u and v are numeric within the ERA dataset 
+
+#- this converts the u and v components to 0-360 degrees 
+
+windDir <-function(u,v){
+  (270-atan2(u,v)*180/pi)%%360 
+}
+
+
+#WDIR= (270-atan2(V,U)*180/pi)%360
+
+#ERA already has windspeed
+
+
+#needs to be saved as ws and wd for openair to work 
+era$wd <-windDir(era$u,era$v)
+
+#in BASE data, it's WS and WD, need to make ws and wd, and make numeric 
+df[, 14:15] <- lapply(df[, 14:15], as.numeric)
+library(dplyr)
+# Rename specific columns
+df <- df %>%
+  rename(wd = WD, ws = WS)
+
+
+
+library(openair)
+# type = "month" shows windrose by month 
+
+windRose(era, type = "year") # 50% calm due to the half hourly gaps in the ERA data -- need to perform short period gapfilling on this 
+windRose(df, type = "year")
+
+#"calm" means a period of time where there is no wind detected / there is still air 
+
+
+```
+
+#checking calcs using slightly diff code specific to era df  
+```{r}
+# Calculate wind direction in degrees
+
+era2 = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling//council_era5.csv')
+
+
+era2$wd <- (270-atan2(era2$u, era2$v) * 180 / pi + 360) %% 360
+
+
+era2_filtered <- era2 %>%
+  filter(date >= as.Date("2019-06-01") & date <= as.Date("2019-07-01"))
+
+# Create the windrose for the filtered data - checking against the other way to calc 
+windRose(df_filtered)
+windRose(era_filtered)
+windRose(era2_filtered)
+#era1 and era2 match, feel pretty confident the conversion is correct. But, it does deviate quite a bit from the actual data from the BASE df...*Ask Kyle about thoughts on this, whether to proceed to the step 1 gapfilling etc to prep it to being incorporated into RF 
+```
+#Checking ERA5 vs BASE wind direction data 
+```{r}
+
+#df$date = df$ts
+
+#merge together
+all = merge(era,df,by = 'date',all = T)
+all = all[!duplicated(all$date),]
+
+
+# 
+# all$date = as.character(all$date)
+# 
+# all$date= as.POSIXct(all$date, tz="UTC", format = "%Y%m%d%H%M")
+
+
+
+library(ggplot2)
+
+# Plotting the data
+ggplot() +
+  # First dataset (df_filtered)
+  geom_point(data = all, aes(x = date, y = wd.x), color = "blue", size = 1) + #ERA data, hourly
+  # Second dataset (era_filtered)
+  geom_point(data = all, aes(x = date, y = wd.y), color = "red", size = 1) + #BASE data, not gapfilled
+  scale_x_datetime(limits = as.POSIXct(c('2019-06-01','2019-07-01')))+
+  # Adding labels and theme
+  labs(title = "Comparison of Wind Direction - blue = ERA5, red = BASE",
+       x = "Date",
+       y = "Wind Direction (0-360 degrees)",
+       color = "Dataset") +
+  theme_minimal()
+
+```
+#Need to do: merge the datasets properly, assign cardinal directions, include wd in the ERA5 dataset saved
+
+#Waiting on this step for now....
+
+#Assigning cardinal directions to 0-360
+```{r}
+#(0=north,90=east,180=south,270=west) that the wind is coming from
+# northerly wind is 0°, an easterly wind is 90°, a southerly wind is 180°, and a westerly wind is 270°
+
+# Function to assign cardinal directions
+get_cardinal_direction <- function(degree) {
+  if (degree >= 337.5 | degree < 22.5) {
+    return("N")
+  } else if (degree >= 22.5 & degree < 67.5) {
+    return("NE")
+  } else if (degree >= 67.5 & degree < 112.5) {
+    return("E")
+  } else if (degree >= 112.5 & degree < 157.5) {
+    return("SE")
+  } else if (degree >= 157.5 & degree < 202.5) {
+    return("S")
+  } else if (degree >= 202.5 & degree < 247.5) {
+    return("SW")
+  } else if (degree >= 247.5 & degree < 292.5) {
+    return("W")
+  } else if (degree >= 292.5 & degree < 337.5) {
+    return("NW")
+  }
+}
+
+# assign cardinal directions
+era$cardinal_direction <- sapply(era$wd, get_cardinal_direction)
+
+
+#another way: assigning cardinal directions to wind direction in degrees using conditional logic to map ranges of degrees (e.g., 0–360) to specific directions (N, NE, E, etc.). 
+
+
+library(dplyr)
+
+# Assign cardinal directions based on wind direction in degrees
+era <- era %>%
+  mutate(
+    wind_direction_cardinal = case_when(
+      wd >= 337.5 | wd < 22.5  ~ "North",
+      wd >= 22.5 & wd < 67.5  ~ "North-East",
+      wd >= 67.5 & wd < 112.5 ~ "East",
+      wd >= 112.5 & wd < 157.5 ~ "South-East",
+      wd >= 157.5 & wd < 202.5 ~ "South",
+      wd >= 202.5 & wd < 247.5 ~ "South-West",
+      wd >= 247.5 & wd < 292.5 ~ "West",
+      wd >= 292.5 & wd < 337.5 ~ "North-West",
+      #TRUE ~ NA_character_ # Handle any missing or invalid values -- not needed in this case 
+    )
+  )
+#checking to see if NA values 
+sum(is.na(era$wd)) #no NA
+
+```
+
+#assigning cardinal directions based only on u and v 
+##Have Kyle look at this - doesn't match up with the cardinal directions from the code chunks above **
+
+```{r}
+
+#(0=north,90=east,180=south,270=west) that the wind is coming from
+#A positive U wind comes from the west, and a negative U wind comes from the east. The V wind component is parallel to the y- axis (i.e. latitude). A positive V wind comes from the south, and a negative V wind comes from the north.
+
+#something is not right -- it doesn't match up with results from the 0-360 degrees
+
+library(dplyr)
+
+# Assign cardinal directions based on u and v components
+era <- era %>%
+  mutate(
+    wind_direction = case_when(
+      u > 0 & v > 0 ~ "SW",  # Positive u and v (wind coming from SW)
+      u > 0 & v < 0 ~ "NW",  # Positive u, negative v (wind coming from NW)
+      u < 0 & v > 0 ~ "SE",  # Negative u, positive v (wind coming from SE)
+      u < 0 & v < 0 ~ "NE",  # Negative u and v (wind coming from NE)
+      u == 0 & v > 0 ~ "S",      # u is 0, v positive (from South)
+      u == 0 & v < 0 ~ "N",      # u is 0, v negative (from North)
+      u > 0 & v == 0 ~ "W",       # u positive, v is 0 (from West)
+      u < 0 & v == 0 ~ "E",       # u negative, v is 0 (from East)
+      TRUE ~ "Calm"                  # when u = 0 and v = 0
+    )
+  )
+
+#Testing the calcs to see why they disagree - found several versions online, all three claim to show direction wind is coming from but have opposing results 
+
+#example data:
+# -2.463795335 u --> comes from east 
+# 5.8896788  v --> comes from s --> should be a SW wind 
+
+#from NSF you can use either of these two equations where DperR = (180/pi):
+          #Dirgeo = atan2(-U,-V) * DperR 
+                # = 270 - (atan2(V,U) * DperR)
+
+#but looking at the ex below in test1 and test3, these two ways give us very different results 
+
+wind_direction_test1 <- (atan2(-(-2.463795335), -(5.8896788)) * 180 / pi) %% 360 #where equation has -(u) and -(v), from NSF pg
+wind_direction_test2 <- (270-atan2(-(-2.463795335), -(5.8896788)) * 180 / pi) %% 360 #where equation has 270 - atan with -(u) and -(v)
+wind_direction_test3 <- (270-atan2(-2.463795335, 5.8896788) * 180 / pi) %% 360 #equation from the atmo github & NSF pg, with 270 - atan.... u, v 
+
+
+print(wind_direction_test1) #157 degrees  --> S/SE --> online wind direction calculator agrees with this 
+print(wind_direction_test2) #112 degrees --> E/SE 
+print(wind_direction_test3) #292 degrees --> W/NW --> opposite....but both claim to be using "direction wind is blowing from"...
+
+
+```
+

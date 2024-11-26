@@ -250,7 +250,7 @@ era <- era %>%
 #but looking at the ex below in test1 and test3, these two ways give us very different results 
 
 wind_direction_test1 <- (atan2(-(-2.463795335), -(5.8896788)) * 180 / pi) %% 360 #where equation has -(u) and -(v), from NSF pg
-wind_direction_test2 <- (270-atan2(-(-2.463795335), -(5.8896788)) * 180 / pi) %% 360 #where equation has 270 - atan with -(u) and -(v)
+wind_direction_test2 <- (270-atan2(-(-2.463795335), -(5.8896788)) * 180 / pi) %% 360 #where equation has 270 - atan with -(u) and -(v) --> this is a less trusted version I found, but test 1 and 3 equations were on the NSF website
 wind_direction_test3 <- (270-atan2(-2.463795335, 5.8896788) * 180 / pi) %% 360 #equation from the atmo github & NSF pg, with 270 - atan.... u, v 
 
 

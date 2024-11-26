@@ -110,6 +110,15 @@ era2$wd <- (270-atan2(era2$u, era2$v) * 180 / pi + 360) %% 360
 era2_filtered <- era2 %>%
   filter(date >= as.Date("2019-06-01") & date <= as.Date("2019-07-01"))
 
+
+
+era_filtered <- era %>%
+  filter(date >= as.Date("2019-06-01") & date <= as.Date("2019-07-01"))
+
+
+df_filtered <- df %>%
+  filter(date >= as.Date("2019-06-01") & date <= as.Date("2019-07-01"))
+
 # Create the windrose for the filtered data - checking against the other way to calc 
 windRose(df_filtered)
 windRose(era_filtered)
@@ -257,6 +266,16 @@ wind_direction_test3 <- (270-atan2(-2.463795335, 5.8896788) * 180 / pi) %% 360 #
 print(wind_direction_test1) #157 degrees  --> S/SE --> online wind direction calculator agrees with this 
 print(wind_direction_test2) #112 degrees --> E/SE 
 print(wind_direction_test3) #292 degrees --> W/NW --> opposite....but both claim to be using "direction wind is blowing from"...
+
+
+# Angle = arctan(V/U)
+wind_direction_test4 <- atan(5.8896788/-2.463795335)
+print(wind_direction_test4)
+
+
+
+
+
 
 
 ```

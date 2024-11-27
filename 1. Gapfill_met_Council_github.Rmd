@@ -1,6 +1,8 @@
 ---
 title: "1. Gapfilling Council from Kyle 7.16.2024" #Gapfill the met data for Council 
 #Here we combined our site data with the ERA5 data to check agreement, used the linear regression to adjust the ERA5 model to make it match even better, and now we are merging that back in with our dataset to use for gapfilling 
+
+#11.25.2024: adding in u and v components for wind direction 
 output: html_document
 date: "2024-09-17"
 ---
@@ -27,7 +29,7 @@ setwd("C:/Users/kkent/Documents/Council Data/Council BASE gapfilling")
 getwd()
 
 #Load your "cleaned" met dataframe
-df = fread(input = "./councilbase_met_flux_clean_2017_2023.csv",na.strings = c('-9999'))#redoing with re-cleaned data from Dani 
+df = fread(input = "C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/councilbase_met_flux_clean_2017_2023.csv",na.strings = c('-9999'))#redoing with re-cleaned data from Dani & with wind direction 
 
 #making all columns numeric, they read in as.character, need to change to as.numeric to have functions work 
 df <- df %>%
@@ -62,6 +64,7 @@ df = df[!duplicated(df$ts),]
 ```
 gap fill short gaps in the met data first
 ```{r}
+
 #10.28.2024 - KK - added in ".c" behind re-cleaned met data from Dani
 
 gap = 3 #represents an hour and a half (3 30min sections), helps fill little data-logger gaps/issues
@@ -95,17 +98,58 @@ df$TS_1_1_1.c = na.spline(df$TS_1_1_1.c,maxgap = gap)
 df$TS_2_1_1.c = na.spline(df$TS_2_1_1.c,maxgap = gap)
 df$TS_3_1_1.c = na.spline(df$TS_3_1_1.c,maxgap = gap)
 df$TS_4_1_1.c = na.spline(df$TS_4_1_1.c,maxgap = gap)
+
+#should I be gapfilling wind direction? 
+#WD before mini gapfill 
+sum(is.na(df$WD)) #66561
+
+#wind direction (degrees, 0-360)
+df$WD = na.spline(df$WD,maxgap = gap)
+
+sum(is.na(df$WD)) #now 66235
 ```
+
+
+#Add cardinal directions for wind direction (WD) in BASE df
+```{r}
+#make sure windDir is numeric 
+
+#(0=north,90=east,180=south,270=west) that the wind is coming from
+# northerly wind is 0°, an easterly wind is 90°, a southerly wind is 180°, and a westerly wind is 270°
+
+# Function to assign cardinal directions
+df <- df %>%
+  mutate(
+    Cardinal_Direction = case_when(
+      WD >= 337.5 | WD < 22.5  ~ "N",
+      WD >= 22.5 & WD < 67.5  ~ "NE",
+      WD >= 67.5 & WD < 112.5 ~ "E",
+      WD >= 112.5 & WD < 157.5 ~ "SE",
+      WD >= 157.5 & WD < 202.5 ~ "S",
+      WD >= 202.5 & WD < 247.5 ~ "SW",
+      WD >= 247.5 & WD < 292.5 ~ "W",
+      WD >= 292.5 & WD < 337.5 ~ "NW",
+      TRUE ~ NA_character_ # Handle any missing or invalid values -- not needed in this case 
+    )
+  )
+
+#checking to see if NA  match up correctly  
+sum(is.na(df$WD)) #66235
+sum(is.na(df$Cardinal_Direction)) #66235
+
+```
+
 
 #Save new file of the cleaned met data with minor gapfilling 
 ```{r}
-write.csv(x = df,file = "./council_2016_2023.csv",row.names = F)
+write.csv(x = df,file = "C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_2016_2023.csv",row.names = F)
 ```
 
 #Load in and Add ERA5 data
 ```{r}
-#load the ERA5 df from step 0
-era = fread('./council_era5.csv')
+#load the ERA5 df from step 0 --> edited to include u and v wind components 
+
+era = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_era5.csv')
 
 df$date = df$ts
 
@@ -121,6 +165,27 @@ all = all[!duplicated(all$date),]
 #checking data, and running linear regressions to be able to adjust the ERA5 data to better represent what data from the site is showing*
 #the linear reg applies an adjustment to the ERA5 data 
 #green data is overwriting the ERA5 pink data -- and we use that linear-reg-adjusted data to help fill in the site data as it's a better representation*
+
+#wind direction in degrees (0-360)
+```{r}
+#lowercase variables come from ERA; upper-case from our cleaned council met dataset
+#KK 10.28.2024: added wind direction 
+#from Kyle - these might not agree well as they could come from different height profiles...so while they don't seem to align well at all here, let's not worry about this for now. 
+
+wd.mod = lm(formula = all$WD ~ all$wd)
+summary(wd.mod)
+
+all$wd.eramod = all$wd*wd.mod$coefficients[2] + wd.mod$coefficients[1]   
+
+ggplot(data = all)+
+  geom_point(aes(date,wd,col='ERA5'))+
+  geom_point(aes(date,WD,col='Site'))
+
+ggplot(data = all,aes(wd,WD))+
+  geom_point()+
+  geom_smooth(method = 'lm')+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=2)
+```
 
 #RH
 ```{r}
@@ -315,6 +380,14 @@ ws = ggplot(data = all,aes(ws,WS))+theme_bw()+
   scale_x_continuous(expression("ERA5 WS ("*ms^-1*")"))+
   scale_y_continuous(expression("Site WS ("*ms^-1*")"))
 
+#added wind direction
+wd = ggplot(data = all,aes(wd,WD))+theme_bw()+
+  geom_point(alpha = 0.25)+
+  geom_smooth(method = 'lm')+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=2)+
+  scale_x_continuous(expression("ERA5 WD ("*ms^-1*")"))+
+  scale_y_continuous(expression("Site WD ("*ms^-1*")"))
+
 le = ggplot(data = all,aes(le,LE.c))+theme_bw()+
   geom_point(alpha = 0.25)+
   geom_smooth(method = 'lm')+
@@ -338,20 +411,20 @@ swc = ggplot(data = all,aes(vwc1*100,SWC_1_1_1.c))+theme_bw()+
 
 #Plot agreement between ERA5 and site data 
 #png(filename = 'C:/Users/karndt.WHRC/Desktop/sites/YKD/plots/unburnedera5.png',width = 8,height = 8,units = 'in',res = 1500)
-plot_grid(ta,rh,vpd,st,sw,ws,le,h,swc)
+plot_grid(ta,rh,vpd,st,sw,ws,wd,le,h,swc)
 #dev.off()
 
-#All look decent except for SWC which clearly is having a rough time
+#All look decent except for SWC and WD which clearly are having a rough time
 ```
 #Select variables of interest from ERA5 / Reduce down to Council size; add adjusted ERA5 model to final data set
 ```{r}
 #select the data / variables you want from the ERA5 instead of saving all
-eras = all[,c('date','rh.eramod','airt.eramod','ws.eramod','rad.eramod','tsoil.eramod','le.eramod','h.eramod')]
+eras = all[,c('date','rh.eramod','airt.eramod','ws.eramod','wd', 'cardinal_direction','u', 'v','rad.eramod','tsoil.eramod','le.eramod','h.eramod')] #adding the u, v, wd (not wd.eramod since it wasn't aligning well at all), and cardinal_direction 
 
 df = df[!duplicated(df$date),] #delete duplicated dates
 df = merge(df,eras,by = 'date',all.x = T) #merge all of those ERA5 variables into our Council dataset 
 
-write.csv(x = df,file = './council_2016_2023_era.csv',row.names = F,quote = F)
+write.csv(x = df,file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_2016_2023_era.csv',row.names = F,quote = F)
 ```
 
 

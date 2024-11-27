@@ -1,5 +1,8 @@
 ---
 title: "Council BASE gapfilling with ERA5 with Kyle" #Here we are prepping the ERA5 model to use for gapfilling in the Ameriflux BASE dataset. EAR5 is hourly, so we break it into half-hourly increments to match that of Ameriflux, and we gapfill those half-hours so we have a continuous dataset to be able to fill in the gaps within the BASE Ameriflux dataset. (Might be slightly different it you're using the Ameriflux Fullset dataset*)
+
+#edit 11/25/2024: trying to add in wind direction 
+
 output: html_document
 date: "2024-09-16"
 ---
@@ -40,7 +43,7 @@ Sys.setenv(TZ = "UTC")
 ```{r}
 #edit to your working directory 
 
-setwd("~/Council Data/Council BASE gapfilling") 
+setwd("C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/Council Data/Council BASE gapfilling") 
 
  
 getwd()
@@ -49,8 +52,6 @@ getwd()
 #Load packages/libraries needed
 
 ```{r}
-
-rm(list = ls()) #clears environment 
 
 library(data.table)
 library(ggplot2)
@@ -169,8 +170,58 @@ eram$vwc2   = na.approx(object = eram$vwc2,maxgap = 1)
 eram$ws   = na.approx(object = eram$ws,maxgap = 1)
 eram$le   = na.approx(object = eram$le,maxgap = 1)
 eram$h   = na.approx(object = eram$h,maxgap = 1)
+eram$u   = na.approx(object = eram$u,maxgap = 1) #adding in u component for little gapfilling
+eram$v   = na.approx(object = eram$v,maxgap = 1) #adding in v component for little gapfilling 
 ```
 
+#Add cardinal directions for u and v wind components 
+```{r}
+#Now that u and v components are in half-hourly, calc wind direction in degrees (0-360) and assign cardinal directions 
+
+#transform u and v component to 0-360 degrees in ERA5 data 
+
+#make sure u and v are numeric within the ERA dataset 
+
+#this function converts the u and v components to 0-360 degrees 
+
+#WDIR= (270-atan2(V,U)*180/pi)%360  
+
+windDir <-function(u,v){
+  (270-atan2(v,u)*180/pi)%%360 
+}
+
+#add wind direction to df 
+eram$wd <-windDir(eram$u,eram$v)
+
+#(0=north,90=east,180=south,270=west) that the wind is coming from
+# northerly wind is 0°, an easterly wind is 90°, a southerly wind is 180°, and a westerly wind is 270°
+
+# Function to assign cardinal directions
+get_cardinal_direction <- function(degree) {
+  if (degree >= 337.5 | degree < 22.5) {
+    return("N")
+  } else if (degree >= 22.5 & degree < 67.5) {
+    return("NE")
+  } else if (degree >= 67.5 & degree < 112.5) {
+    return("E")
+  } else if (degree >= 112.5 & degree < 157.5) {
+    return("SE")
+  } else if (degree >= 157.5 & degree < 202.5) {
+    return("S")
+  } else if (degree >= 202.5 & degree < 247.5) {
+    return("SW")
+  } else if (degree >= 247.5 & degree < 292.5) {
+    return("W")
+  } else if (degree >= 292.5 & degree < 337.5) {
+    return("NW")
+  }
+}
+
+
+
+# assign cardinal directions
+eram$cardinal_direction <- sapply(eram$wd, get_cardinal_direction)
+```
 
 
 #check out the data to make sure it looks okay - want to patterns we expect (like air temp inc and dec within each year, etc)
@@ -195,12 +246,16 @@ ggplot(data = eram)+theme_bw()+
 
 ggplot(data = eram)+theme_bw()+geom_hline(yintercept = 0)+
   geom_point(aes(date,ws))
+
+library(openair)
+
+windRose(eram)
 ```
   
 #Save new file of the half-hourly ERA5 data to use for gapfilling in next steps 
 
 ```{r}
-write.csv(x = eram,file = '~/Council Data/Council BASE gapfilling./council_era5.csv',row.names = F)
+write.csv(x = eram,file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_era5.csv',row.names = F)
 ```
 
 

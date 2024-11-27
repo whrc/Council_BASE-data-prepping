@@ -281,4 +281,10 @@ print(wind_direction_test2) #157 --> now these match, after fixing order of U an
 
 
 ```
+#Save new file of ERA5 for next steps --> either do this step within step 0, or after step 1 
+#I embedded it into the code in step "0. Council BASE gapfilling with ERA5_github", after making half-hourly & filling in short gaps --> then go on to calc and assign cardinal directions 
+
+```{r}
+write.csv(x = eram,file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_windDir_era5.csv',row.names = F)
+```
 

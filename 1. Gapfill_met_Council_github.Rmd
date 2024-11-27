@@ -99,14 +99,8 @@ df$TS_2_1_1.c = na.spline(df$TS_2_1_1.c,maxgap = gap)
 df$TS_3_1_1.c = na.spline(df$TS_3_1_1.c,maxgap = gap)
 df$TS_4_1_1.c = na.spline(df$TS_4_1_1.c,maxgap = gap)
 
-#should I be gapfilling wind direction? 
-#WD before mini gapfill 
-sum(is.na(df$WD)) #66561
+#can't gapfill WD as it makes the degrees -50 - 550, and BASE has no u and v components 
 
-#wind direction (degrees, 0-360)
-df$WD = na.spline(df$WD,maxgap = gap)
-
-sum(is.na(df$WD)) #now 66235
 ```
 
 
@@ -134,8 +128,8 @@ df <- df %>%
   )
 
 #checking to see if NA  match up correctly  
-sum(is.na(df$WD)) #66235
-sum(is.na(df$Cardinal_Direction)) #66235
+sum(is.na(df$WD)) #66561
+sum(is.na(df$Cardinal_Direction)) #66561
 
 ```
 

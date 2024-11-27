@@ -62,20 +62,28 @@ summary(df$TIMESTAMP)
 
 #make sure u and v are numeric within the ERA dataset 
 
-#- this converts the u and v components to 0-360 degrees 
+#- this function converts the u and v components to 0-360 degrees 
+
+#WDIR= (270-atan2(V,U)*180/pi)%360  
 
 windDir <-function(u,v){
-  (270-atan2(u,v)*180/pi)%%360 
+  (270-atan2(v,u)*180/pi)%%360 
 }
 
 
-#WDIR= (270-atan2(V,U)*180/pi)%360
+#from NSF you can use either of these two equations, where DperR = (180/pi):
+          #Dirgeo = atan2(-U,-V) * DperR <note, -u,-v
+                # = 270 - (atan2(V,U) * DperR)
 
-#ERA already has windspeed
+
+#ERA already has windspeed so don't need to calculate, but here is an equation or see Kyle's code:
+#Spd is the horizontal wind speed:  Spd = sqrt(U^2 + V^2)
 
 
-#needs to be saved as ws and wd for openair to work 
+#wind dir and speed need to be saved as ws and wd for openair to work 
+
 era$wd <-windDir(era$u,era$v)
+
 
 #in BASE data, it's WS and WD, need to make ws and wd, and make numeric 
 df[, 14:15] <- lapply(df[, 14:15], as.numeric)
@@ -104,7 +112,7 @@ windRose(df, type = "year")
 era2 = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling//council_era5.csv')
 
 
-era2$wd <- (270-atan2(era2$u, era2$v) * 180 / pi + 360) %% 360
+era2$wd <- (270-atan2(era2$v, era2$u) * 180 / pi + 360) %% 360
 
 
 era2_filtered <- era2 %>%
@@ -159,11 +167,8 @@ ggplot() +
   theme_minimal()
 
 ```
-#Need to do: merge the datasets properly, assign cardinal directions, include wd in the ERA5 dataset saved
 
-#Waiting on this step for now....
-
-#Assigning cardinal directions to 0-360
+#Assigning cardinal directions to 0-360, 2 ways 
 ```{r}
 #(0=north,90=east,180=south,270=west) that the wind is coming from
 # northerly wind is 0°, an easterly wind is 90°, a southerly wind is 180°, and a westerly wind is 270°
@@ -218,19 +223,17 @@ sum(is.na(era$wd)) #no NA
 
 ```
 
-#assigning cardinal directions based only on u and v 
-##Have Kyle look at this - doesn't match up with the cardinal directions from the code chunks above **
+#assigning cardinal directions based only on u and v to check cardinal directions 
 
 ```{r}
-
 #(0=north,90=east,180=south,270=west) that the wind is coming from
 #A positive U wind comes from the west, and a negative U wind comes from the east. The V wind component is parallel to the y- axis (i.e. latitude). A positive V wind comes from the south, and a negative V wind comes from the north.
 
-#something is not right -- it doesn't match up with results from the 0-360 degrees
+#Note, in this way, true N, E, W, S etc only occur when u or v = 0, which they don't in this dataset, so these will always be NW, NE, SW, SE -> but can help you check out that they relatively match the cardinal assignments from code chunks above  
 
 library(dplyr)
 
-# Assign cardinal directions based on u and v components
+# Assign cardinal directions based on u and v components alone 
 era <- era %>%
   mutate(
     wind_direction = case_when(
@@ -246,31 +249,30 @@ era <- era %>%
     )
   )
 
-#Testing the calcs to see why they disagree - found several versions online, all three claim to show direction wind is coming from but have opposing results 
+#Testing the calcs - was just double checking various ways to calc cardinal directions 
 
 #example data:
-# -2.463795335 u --> comes from east 
-# 5.8896788  v --> comes from s --> should be a SW wind 
+# -2.463795335 u --> neg --> comes from east 
+# 5.8896788  v --> pos --> comes from s --> should be a SE wind 
 
 #from NSF you can use either of these two equations where DperR = (180/pi):
-          #Dirgeo = atan2(-U,-V) * DperR 
-                # = 270 - (atan2(V,U) * DperR)
+          #Dirgeo = atan2(-U,-V) * DperR <note, -u,-v
+                # = 270 - (atan2(V,U) * DperR)  <note, this swaps to v,u --> (in the atmo git, this was reversed, which reversed all the caridnal directions / made directions at odds with u,v component directions --> now that order was swapped to V,U, this seems to match the wind dir based on the +/- u and v components*)
 
-#but looking at the ex below in test1 and test3, these two ways give us very different results 
 
 wind_direction_test1 <- (atan2(-(-2.463795335), -(5.8896788)) * 180 / pi) %% 360 #where equation has -(u) and -(v), from NSF pg
-wind_direction_test2 <- (270-atan2(-(-2.463795335), -(5.8896788)) * 180 / pi) %% 360 #where equation has 270 - atan with -(u) and -(v) --> this is a less trusted version I found, but test 1 and 3 equations were on the NSF website
-wind_direction_test3 <- (270-atan2(-2.463795335, 5.8896788) * 180 / pi) %% 360 #equation from the atmo github & NSF pg, with 270 - atan.... u, v 
+
+wind_direction_test2 <- (270-atan2(5.8896788, -2.463795335) * 180 / pi) %% 360 #equation from NSF pg, with 270 - atan... V,U  
 
 
 print(wind_direction_test1) #157 degrees  --> S/SE --> online wind direction calculator agrees with this 
-print(wind_direction_test2) #112 degrees --> E/SE 
-print(wind_direction_test3) #292 degrees --> W/NW --> opposite....but both claim to be using "direction wind is blowing from"...
+print(wind_direction_test2) #157 --> now these match, after fixing order of U and V 
 
 
-# Angle = arctan(V/U)
-wind_direction_test4 <- atan(5.8896788/-2.463795335)
-print(wind_direction_test4)
+# Angle = arctan(V/U) 
+#another way--> this is valid as long as U is not equal to zero BUT you also adjust for what quadrant you are in based on whether U and V are positive or negative. The built-in arctan2() function in R will do this for you  
+# wind_direction_test3 <- atan(5.8896788/-2.463795335)
+# print(wind_direction_test3)   #-1.17, so not right, needs adjustment -- just use arctant2 functions above 
 
 
 

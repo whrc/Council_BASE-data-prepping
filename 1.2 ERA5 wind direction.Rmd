@@ -97,12 +97,13 @@ df <- df %>%
 library(openair)
 # type = "month" shows windrose by month 
 
-windRose(era, type = "year") # 50% calm due to the half hourly gaps in the ERA data -- need to perform short period gapfilling on this 
+windRose(era, type = "year")  
 windRose(df, type = "year")
 
 #"calm" means a period of time where there is no wind detected / there is still air 
 
-
+#these two show opposing windRose features but the site data is missing a lot of data 
+sum(is.na(df$wd)) #66561 NAs in site data
 ```
 
 #checking calcs using slightly diff code specific to era df  
@@ -132,6 +133,8 @@ windRose(df_filtered)
 windRose(era_filtered)
 windRose(era2_filtered)
 #era1 and era2 match, feel pretty confident the conversion is correct. But, it does deviate quite a bit from the actual data from the BASE df...*Ask Kyle about thoughts on this, whether to proceed to the step 1 gapfilling etc to prep it to being incorporated into RF 
+
+sum(is.na(df_filtered$wd)) #12 NA's in the data filtered by date....site data and ERA5 don't match up very well 
 ```
 #Checking ERA5 vs BASE wind direction data 
 ```{r}

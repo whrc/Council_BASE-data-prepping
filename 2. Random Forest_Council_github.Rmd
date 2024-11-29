@@ -27,25 +27,67 @@ library(Boruta)
 Sys.setenv(TZ='UTC')
 ```
 
-#Load in site data
+#Load in site data & make training datasets 
 ```{r,error=FALSE,warning=FALSE}
-cf = fread("C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_2016_2023_era.csv")
-#cf = fread('./council_2016_2023_era.csv') #using the re-cleaned df from Dani 
+cf = fread("C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_2016_2023_era.csv") #using the re-cleaned df from Dani 
+
+#subset out by which has complete air t data 
 cf = cf[complete.cases(cf$airt.eramod),]
 
+
+```
+
+#Create subset of data to use for RF training -- use only ERA5 variables for training (unless it's a target variable? Use ERA5 wd or site wd with lots of NAs? *Ask Kyle)
+
+```{r}
 #create a sub data frame of the variables you want for a neural network (random forest)
-ncf = data.frame(cf$date,cf$FC,cf$FCH4,
-                 cf$airt.eramod,cf$rh.eramod,cf$rad.eramod,
-                 cf$ws.eramod,cf$tsoil.eramod,cf$SWC_1_1_1,
+#KK Nov 27: added in u, v, wd, and cardinal direction from era df; also changed FC and FCH4 to FC.c, FCH4.c, and SWC_1_1_1.c to use re-cleaned data --> adj to WD from actual data and Cardinal_Direction from actual data as these seem to be era5 data adj by actual data and this uses the actual SWC data from site.
+#####
+#should I be using the variables from the era5 or the actual site data for this neural network training? **ASK KYLE 
+#need no NAs to be able to use this as a predictor in RF....so might have to try era5 version or drop NA's?***************
+
+
+#create subset of the variables wanted for training RF
+ncf = data.frame(cf$date,cf$FC.c,cf$FCH4.c,
+                 cf$airt.eramod, cf$wd, cf$cardinal_direction, cf$rh.eramod,cf$rad.eramod,
+                 cf$ws.eramod,cf$tsoil.eramod,cf$SWC_1_1_1.c,
                  cf$h.eramod,cf$le.eramod)
 
-#rename for easier names
-names(ncf) = c('date','nee',"fch4",'tair','rh','rg','ws','tsoil','swc','h','le')
+#another way to subset a new df 
+# library(dplyr)
+# 
+# # Select specific variables from 'cf' and store them in 'ncf'
+# ncf <- cf %>%
+#   select(date, FC.c, FCH4.c, airt.eramod, WD, Cardinal_Direction, rh.eramod, rad.eramod, ws.eramod, tsoil.eramod, SWC_1_1_1.c, h.eramod, le.eramod)  
 
+# View the new dataframe
+head(ncf)
+
+#rename for easier names
+names(ncf) = c('date','nee',"fch4",'tair', 'wd', 'cardDir','rh','rg','ws','tsoil','swc','h','le')
+
+#make the ERA5 wd numeric 
+
+
+# #can't have NAs, so need to remove them or use the ERA5 data -- tried this, model still didn't want to run...
+# ncf$wd <- na.omit(ncf$wd)
+# ncf$cardDir <- na.omit(ncf$cardDir)
+
+#make card dir as factor - 8 levels 
+ncf$cardDir <- as.factor(ncf$cardDir)
+
+```
+
+
+#Calc VPD from air temp and RH
+```{r}
 #calculate VPD from air t and RH
 svp = 610.7*10^((7.5*ncf$tair)/(237.3+ncf$tair))
 ncf$vpd = ((100 - ncf$rh)/100)*svp  
+```
 
+#create training dataset and testing dataset 
+```{r}
 set.seed(123)#sets the start point of models, good for repeatability
 cc = ncf[complete.cases(ncf$swc),]#create a gap free data set of the target variable
 
@@ -59,13 +101,25 @@ hist(cc$swc)
 hist(train$swc)
 hist(test$swc)
 
-#run random forest to predict missing SWC values
-rf.swc = randomForest(formula = swc ~ tair + rh + rg + ws + tsoil + vpd + le + h,data = train,ntree = 100)
+#run random forest to predict missing SWC values - leave out or include wd? included wd here* 
+rf.swc = randomForest(formula = swc ~ tair + rh + rg + ws + wd + tsoil + vpd + le + h,data = train,ntree = 150)
+#tried various tree numbers, no sig improvement after 300....very minimal diff between 150 and 300, and 150 looks slightly better.
 
 #predict it on the full data set
 swc.rf = predict(object = rf.swc,newdata = ncf)
 ncf$swc.rf = swc.rf #add the variable to the main data frame
+
+
+#run random forest to predict missing SWC values - used wd and carDir --> very similar results to when just using wd 
+# rf.swc2 = randomForest(formula = swc ~ tair + rh + rg + ws + wd + cardDir + tsoil + vpd + le + h,data = train,ntree = 150)
+# #tried various tree numbers, no sig improvement after 300....very minimal diff between 150 and 300, and 150 looks slightly better.
+# 
+# #predict it on the full data set
+# swc.rf2 = predict(object = rf.swc2,newdata = ncf)
+# ncf$swc.rf2 = swc.rf2 #add the variable to the main data frame
+
 ```
+
 
 #Check out the SWC gap filling
 ```{r}
@@ -84,27 +138,51 @@ ggplot(data = val,aes(swc.rf,swc.x))+theme_bw()+geom_abline(slope = 1,intercept 
   scale_y_continuous(limits = c(0,70),"Measured SWC (%)")
 
 #summary stats on gap filling
-summary(lm(val$swc.x ~ val$swc.rf))
+summary(lm(val$swc.x ~ val$swc.rf)) #R2 = 0.943
 
 #create final gap free soil moisture
 ncf$swc = ifelse(is.na(ncf$swc),ncf$swc.rf,ncf$swc)
-```
 
-#Examine variable importance
+#results from using cardinal directions as well as wd in RF --> very similar results, using the version with just wd for simplicity 
+#time series plot of gap filled vs real
+# ggplot(data = ncf)+
+#   geom_point(aes(date,swc.rf2*100,col='RF'))+
+#   geom_point(aes(date,swc*100,col='Measured'))+
+#   scale_y_continuous("SWC (%)")
+# 
+# #validation dataset from only test data
+# val = merge(test,ncf,by = "date",all.x = T)
+# 
+# ggplot(data = val,aes(swc.rf2,swc.x))+theme_bw()+geom_abline(slope = 1,intercept = 0,col='red')+
+#   geom_point(alpha=0.1)+
+#   scale_x_continuous(limits = c(0,70),"RF SWC (%)")+
+#   scale_y_continuous(limits = c(0,70),"Measured SWC (%)")
+# 
+# #summary stats on gap filling
+# summary(lm(val$swc.x ~ val$swc.rf2)) #R2 = 0.945
+
+#create final gap free soil moisture
+#ncf$swc = ifelse(is.na(ncf$swc),ncf$swc.rf,ncf$swc)
+```
+#NEE 
+
+####Create NEE dataset & Examine variable importance
 ```{r}
 set.seed(123)
-cc = ncf[complete.cases(ncf$nee),]
+cc = ncf[complete.cases(ncf$nee),] #complete NEE data only 
 cc = subset(cc,cc$nee < 12 & cc$nee > -14) #setting some limits on the spread of data to exclude some of those large outliers and tidy up the model 
 
 #this attempts to establish which of the variables have the most important influence on NEE - kyle commented this out, may not be necessary & can take a little while to run but cool to see 
-boruta = Boruta(nee ~ tair + rh + rg + ws + tsoil + swc + vpd + le + h,data = cc,doTrace = 2,maxRuns = 100)
+
+#added in wd (degrees)
+boruta = Boruta(nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h,data = cc,doTrace = 2,maxRuns = 100)
 
 #kyle commented this out, looks at the boruta output
 plot(boruta,las = 2)
 ```
 
 
-#Lets try to fill with random forest
+####Lets try to fill with random forest
 ```{r,error=FALSE,warning=FALSE}
 #use 80% of data set as training set and 20% as test set
 sample.nee = sample(c(TRUE, FALSE), nrow(cc), replace=TRUE, prob=c(0.8,0.2))
@@ -115,19 +193,39 @@ hist(cc$nee)
 hist(train.nee$nee)
 hist(test.nee$nee)
 
-rfnee = randomForest(formula = nee ~ tair + rh + rg + ws + tsoil + swc + vpd + le + h,data = train.nee,ntree = 100,importance=T)
+sum(is.na(cc$swc)) #make sure there are no NAs in dataset or RF model won't work 
+
+
+#original, no wind 
+rfnee = randomForest(formula = nee ~ tair + cardDir + rh + rg + ws + tsoil + swc + vpd + le + h,data = train.nee,ntree = 150,importance=T)
 
 pnee = predict(object = rfnee,newdata = ncf)
 
 cf$rfnee = pnee
+
+
+#using just wd (no cardDir)
+rfnee.2 = randomForest(formula = nee ~ tair + cardDir + rh + rg + ws + wd + tsoil + swc + vpd + le + h,data = train.nee,ntree = 150,importance=T)
+
+pnee.2 = predict(object = rfnee.2,newdata = ncf)
+
+cf$rfnee.2 = pnee.2
+
+
+#trying with just cardinal directions (no wd)
+rfnee.3 = randomForest(formula = nee ~ tair + cardDir + rh + rg + ws + cardDir + tsoil + swc + vpd + le + h,data = train.nee,ntree = 150,importance=T)
+
+pnee.3 = predict(object = rfnee.3,newdata = ncf)
+
+cf$rfnee.3 = pnee.3
 ```
 
 
-#Time series plots
+####Time series plots
 ```{r,error=FALSE,warning=FALSE}
 #This overlays the random forest modeled data points with the real data points so you can observe model agreement 
 
-#plot of certain timeframe 
+#plot of certain timeframe - no wind 
 ggplot(data = cf)+theme_bw()+
   geom_point(aes(date,rfnee,col='RF'),alpha=0.2)+
   geom_point(aes(date,FC.c,col='Real'),alpha=0.2)+
@@ -137,14 +235,44 @@ ggplot(data = cf)+theme_bw()+
   geom_point(aes(date,rfnee,col='RF'),alpha=0.2)+
   geom_point(aes(date,FC.c,col='Real'),alpha=0.2)+
   geom_hline(yintercept = 0)
+
+
+#plot of certain timeframes using wd (degrees) 
+ggplot(data = cf)+theme_bw()+
+  geom_point(aes(date,rfnee.2,col='RF'),alpha=0.2)+
+  geom_point(aes(date,FC.c,col='Real'),alpha=0.2)+
+  labs(title = "with WD (degrees)")+
+  scale_x_datetime(limits = as.POSIXct(c("2019-06-15","2019-06-30")))
+#plot of all years 
+ggplot(data = cf)+theme_bw()+
+  geom_point(aes(date,rfnee.2,col='RF'),alpha=0.2)+
+  geom_point(aes(date,FC.c,col='Real'),alpha=0.2)+
+  geom_hline(yintercept = 0)+
+    labs(title = "with WD (degrees)")
+
+
+#plot of certain timeframe - cardinal directions, no wd  
+ggplot(data = cf)+theme_bw()+
+  geom_point(aes(date,rfnee.3,col='RF'),alpha=0.2)+
+  geom_point(aes(date,FC.c,col='Real'),alpha=0.2)+
+  labs(title = "Cardinal Direction (no wd)")+
+  scale_x_datetime(limits = as.POSIXct(c("2019-06-15","2019-06-30")))
+#plot of all years 
+ggplot(data = cf)+theme_bw()+
+  geom_point(aes(date,rfnee.3,col='RF'),alpha=0.2)+
+  geom_point(aes(date,FC.c,col='Real'),alpha=0.2)+
+  geom_hline(yintercept = 0)+
+  labs(title = "Cardinal Direction (no wd)")
+
+#Results very similar, also seems to be predicting slightly lower/more conservative nee compared to site data 
 ```
 
 
-#Validation - looking at agreement between modeled data and real data 
+####Validation - looking at agreement between modeled data and real data 
 ```{r,error=FALSE,warning=FALSE}
-#changed to FC.c to use re-cleaned variable
+#changed to FC.c to use re-cleaned variable - original model, no wind direction 
 test.data.nee = merge(test.nee,cf,by = 'date',all.x = T)
-summary(lm(test.data.nee$FC.c ~ test.data.nee$rfnee))
+summary(lm(test.data.nee$FC.c ~ test.data.nee$rfnee)) #R2 = 0.64, slope = 1.02
 
 councilnee = ggplot(data = test.data.nee,aes(rfnee,FC.c))+theme_bw()+
   geom_hline(yintercept = 0,lty=2)+
@@ -154,20 +282,69 @@ councilnee = ggplot(data = test.data.nee,aes(rfnee,FC.c))+theme_bw()+
   geom_abline(slope = 1,intercept = 0,col='red',lty=1)+
   scale_x_continuous(limits = c(-20,20),expression('Random Forest NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
   scale_y_continuous(limits = c(-20,20),expression('Eddy Covariance NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
-  annotate(geom = 'text',x = 6, y = -8,label=expression(R^2~"= 0.41"),size = 3)+
-  annotate(geom = 'text',x = 6,y = -10,label=expression(Slope~"= 0.98"),size = 3)+
-  theme(text = element_text(size = 8))
+  annotate(geom = 'text',x = 6, y = -8,label=expression(R^2~"= 0.64"),size = 3)+
+  annotate(geom = 'text',x = 6,y = -10,label=expression(Slope~"= 1.02"),size = 3)+
+  theme(text = element_text(size = 8)) +
+  labs(title = "Orig - no wind")
 
-councilnee
+councilnee 
+
+#Added wd (degrees)
+test.data.nee = merge(test.nee,cf,by = 'date',all.x = T)
+summary(lm(test.data.nee$FC.c ~ test.data.nee$rfnee.2)) #R2 = 0.65, slope = 1.03
+
+councilnee2 = ggplot(data = test.data.nee,aes(rfnee.2,FC.c))+theme_bw()+
+  geom_hline(yintercept = 0,lty=2)+
+  geom_vline(xintercept = 0,lty=2)+
+  geom_point(alpha=0.2)+
+  scale_fill_viridis_c()+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=1)+
+  scale_x_continuous(limits = c(-20,20),expression('Random Forest NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
+  scale_y_continuous(limits = c(-20,20),expression('Eddy Covariance NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
+  annotate(geom = 'text',x = 6, y = -8,label=expression(R^2~"= 0.65"),size = 3)+
+  annotate(geom = 'text',x = 6,y = -10,label=expression(Slope~"= 1.03"),size = 3)+
+  theme(text = element_text(size = 8)) +
+  labs(title = "with WD (degrees)")
+
+councilnee2 
+
+#used cardinal direction only 
+test.data.nee = merge(test.nee,cf,by = 'date',all.x = T)
+summary(lm(test.data.nee$FC.c ~ test.data.nee$rfnee.3)) #R2 = 0.65, slope = 1.03
+
+councilnee3 = ggplot(data = test.data.nee,aes(rfnee.3,FC.c))+theme_bw()+
+  geom_hline(yintercept = 0,lty=2)+
+  geom_vline(xintercept = 0,lty=2)+
+  geom_point(alpha=0.2)+
+  scale_fill_viridis_c()+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=1)+
+  scale_x_continuous(limits = c(-20,20),expression('Random Forest NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
+  scale_y_continuous(limits = c(-20,20),expression('Eddy Covariance NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
+  annotate(geom = 'text',x = 6, y = -8,label=expression(R^2~"= 0.65"),size = 3)+
+  annotate(geom = 'text',x = 6,y = -10,label=expression(Slope~"= 1.03"),size = 3)+
+  theme(text = element_text(size = 8))+
+  labs(title = "with wind cardinal direction")
+
+councilnee3 
 ```
 
-#Examine variable importance
+#Methane 
+
+####Examine variable importance for FCH4
 ```{r}
 set.seed(123)
 cc = ncf[complete.cases(ncf$fch4),]
 
-boruta = Boruta(fch4 ~ tair + rh + rg + ws + tsoil + swc + vpd + le + h,data = cc,doTrace = 2,maxRuns = 100)
-plot(boruta,las = 2)
+#added wd (degrees)
+boruta = Boruta(fch4 ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h,data = cc,doTrace = 2,maxRuns = 100)
+boruta$finalDecision #indicates all above are confirmed important variables via a list 
+plot(boruta,las = 2) #plots the variables; green = important, yellow = tentative, red = not important 
+
+ 
+
+#added wd - cardinal direction
+boruta2 = Boruta(fch4 ~ tair + rh + rg + ws + cardDir + tsoil + swc + vpd + le + h,data = cc,doTrace = 2,maxRuns = 100)
+plot(boruta2,las = 2)
 ```
 
 
@@ -194,79 +371,41 @@ summary(cc$fch4)
 summary(train.ch4$fch4)
 summary(test.ch4$fch4)
 
+#no wind direction 
 rfch4 = randomForest(formula = fch4 ~ tair + rh + rg + ws + tsoil + vpd + swc + h + le,data = train.ch4,ntree = 150)
-#ntree set at 100 before --> trying 150, and 200 (200 was very similar to 150, trying 300 & 1000 --> no real noticeable improvement after 150 or 300)
 
 pch4 = predict(object = rfch4,newdata = ncf)
 
 cf$rfch4 = pch4
+
+#added wd (degrees)
+rfch4.2 = randomForest(formula = fch4 ~ tair + rh + rg + ws + wd + tsoil + vpd + swc + h + le,data = train.ch4,ntree = 150)
+
+pch4.2 = predict(object = rfch4.2,newdata = ncf)
+
+cf$rfch4.2 = pch4.2
+
+#added cardinal direction (no wd) 
+rfch4.3 = randomForest(formula = fch4 ~ tair + rh + rg + ws + cardDir  + tsoil + vpd + swc + h + le,data = train.ch4,ntree = 150)
+
+
+pch4.3 = predict(object = rfch4.3,newdata = ncf)
+
+cf$rfch4.3 = pch4.3
+
+#added cardinal direction and wd 
+rfch4.4 = randomForest(formula = fch4 ~ tair + rh + rg + ws + wd + cardDir + tsoil + vpd + swc + h + le,data = train.ch4,ntree = 150)
+
+
+pch4.4 = predict(object = rfch4.4,newdata = ncf)
+
+cf$rfch4.4 = pch4.4
 ```
 
-#Plots and Validation
+#Validation - looking at agreement between modeled data and real data 
+## Methane - no wind direction, RF tree = 150 
 ```{r,error=FALSE,warning=FALSE}
-#changed to FCH4.c to use re-cleaned data 
-#Plots modeled vs real data among several dates to observe agreement 
-
-ggplot(data = cf)+theme_bw()+
-  geom_point(aes(date,rfch4,col='RF'),alpha=0.5)+
-  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
-  scale_x_datetime(limits = as.POSIXct(c("2019-07-01","2019-07-30")))
- # scale_y_continuous(limits = c(-0.05,0.05))
-
-ggplot(data = cf)+theme_bw()+
-  geom_point(aes(date,rfch4,col='RF'),alpha=0.5)+
-  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
-  scale_x_datetime(limits = as.POSIXct(c("2017-01-01","2017-12-30")))
- # scale_y_continuous(limits = c(-0.05,0.05))
-
-ggplot(data = cf)+theme_bw()+
-  geom_point(aes(date,rfch4,col='RF'),alpha=0.5)+
-  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
-  scale_x_datetime(limits = as.POSIXct(c("2018-01-01","2018-12-30")))
- # scale_y_continuous(limits = c(-0.05,0.05))
-
-ggplot(data = cf)+theme_bw()+
-  geom_point(aes(date,rfch4,col='RF'),alpha=0.5)+
-  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
-  scale_x_datetime(limits = as.POSIXct(c("2019-01-01","2019-12-30")))
- # scale_y_continuous(limits = c(-0.05,0.05))
-
-ggplot(data = cf)+theme_bw()+
-  geom_point(aes(date,rfch4,col='RF'),alpha=0.5)+
-  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
-  scale_x_datetime(limits = as.POSIXct(c("2020-01-01","2020-12-30")))
- # scale_y_continuous(limits = c(-0.05,0.05))
-
-ggplot(data = cf)+theme_bw()+
-  geom_point(aes(date,rfch4,col='RF'),alpha=0.5)+
-  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
-  scale_x_datetime(limits = as.POSIXct(c("2021-01-01","2021-12-30")))
- # scale_y_continuous(limits = c(-0.05,0.05))
-
-ggplot(data = cf)+theme_bw()+
-  geom_point(aes(date,rfch4,col='RF'),alpha=0.5)+
-  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
-  scale_x_datetime(limits = as.POSIXct(c("2022-01-01","2022-12-30")))
- # scale_y_continuous(limits = c(-0.05,0.05))
-
-
-ggplot(data = cf)+theme_bw()+
-  geom_point(aes(date,rfch4,col='RF'),alpha=0.5)+
-  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
-  scale_x_datetime(limits = as.POSIXct(c("2023-01-01","2023-12-30")))
- # scale_y_continuous(limits = c(-0.05,0.05))
-
-
-ggplot(data = cf)+theme_bw()+
-  geom_point(aes(date,rfch4,col='RF'),alpha=0.2)+
-  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.2)
-
-
-```
-
-
-```{r,error=FALSE,warning=FALSE}
-#changed to FCH4.c to use the re-cleaned data
+#changed to FCH4.c to use the re-cleaned data - orig model, no wind direction 
 
 test.data.ch4 = merge(test.ch4,cf,by = 'date',all.x = T)
 
@@ -278,13 +417,149 @@ councilch4 = ggplot(data = test.data.ch4,aes(rfch4,FCH4.c))+theme_bw()+
   geom_abline(slope = 1,intercept = 0,col='red',lty=1)+
   scale_x_continuous(limits = c(-50,150),expression('Random Forest '*CH[4]~flux~" ("*mu*mol~CH[4]~m^-2~s^-1*')'))+
   scale_y_continuous(limits = c(-50,150),expression('Eddy Covariance '*CH[4]~flux~" ("*mu*mol~CH[4]~m^-2~s^-1*')'))+
-  annotate(geom = 'text',x = 100,y = 20,label = expression(R^2~"= 0.52"),size = 3)+
-  annotate(geom= 'text',x = 100,y = 10,label = expression(Slope~"= 1.09"),size = 3)+
+  annotate(geom = 'text',x = 100,y = 20,label = expression(R^2~"= 0.44"),size = 3)+
+  annotate(geom= 'text',x = 100,y = 10,label = expression(Slope~"= 1.02"),size = 3)+
   theme(text = element_text(size = 8))
 
 councilch4
-summary(lm(test.data.ch4$FCH4.c ~ test.data.ch4$rfch4))
+
+summary(lm(test.data.ch4$FCH4.c ~ test.data.ch4$rfch4)) #R2 = 0.44, slope = 1.02 --> R2 before changing tree # was R2=0.52
 ```
+##Methane - adding wind direction 
+
+```{r,error=FALSE,warning=FALSE}
+
+#added wd (degrees)
+test.data.ch4.2 = merge(test.ch4,cf,by = 'date',all.x = T)
+summary(lm(test.data.ch4$FCH4.c ~ test.data.ch4$rfch4.2)) #R2 = 0.47, slope = 1.01 
+
+councilch4.2= ggplot(data = test.data.ch4,aes(rfch4.2,FCH4.c))+theme_bw()+
+  geom_hline(yintercept = 0,lty=2)+
+  geom_vline(xintercept = 0,lty=2)+
+  geom_point(alpha=0.2)+
+  scale_fill_viridis_c()+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=1)+
+  scale_x_continuous(limits = c(-50,150),expression('Random Forest FCH4 - with WD ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
+  scale_y_continuous(limits = c(-50,150),expression('Eddy Covariance FCH4 ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
+  annotate(geom = 'text',x = 50, y = -8,label=expression(R^2~"= 0.47"),size = 3)+
+  annotate(geom = 'text',x = 50,y = -15,label=expression(Slope~"= 1.01"),size = 3)+
+  theme(text = element_text(size = 8))
+
+councilch4.2 
+
+#used cardinal direction 
+test.data.ch4.3 = merge(test.ch4,cf,by = 'date',all.x = T)
+summary(lm(test.data.ch4.3$FCH4.c ~ test.data.ch4$rfch4.3)) #R2 =0.46, slope = 0.99
+
+councilch4= ggplot(data = test.data.ch4,aes(rfch42,FCH4.c))+theme_bw()+
+  geom_hline(yintercept = 0,lty=2)+
+  geom_vline(xintercept = 0,lty=2)+
+  geom_point(alpha=0.2)+
+  scale_fill_viridis_c()+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=1)+
+  scale_x_continuous(limits = c(-50,150),expression('Random Forest FCH4 with card Dir ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
+  scale_y_continuous(limits = c(-50,150),expression('Eddy Covariance FCH4 ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
+  annotate(geom = 'text',x = 6, y = -8,label=expression(R^2~"= 0.46"),size = 3)+
+  annotate(geom = 'text',x = 6,y = -10,label=expression(Slope~"= 0.99"),size = 3)+
+  theme(text = element_text(size = 8))
+
+councilch4.3 
+
+#used cardinal direction and wd 
+test.data.ch4.4 = merge(test.ch4,cf,by = 'date',all.x = T)
+summary(lm(test.data.ch4.4$FCH4.c ~ test.data.ch4.4$rfch4.4)) #R2 =0.46, slope = 1.00
+
+councilch4= ggplot(data = test.data.ch4,aes(rfch42,FCH4.c))+theme_bw()+
+  geom_hline(yintercept = 0,lty=2)+
+  geom_vline(xintercept = 0,lty=2)+
+  geom_point(alpha=0.2)+
+  scale_fill_viridis_c()+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=1)+
+  scale_x_continuous(limits = c(-50,150),expression('Random Forest FCH4 with cardDir and WD ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
+  scale_y_continuous(limits = c(-50,150),expression('Eddy Covariance FCH4 ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
+  annotate(geom = 'text',x = 6, y = -8,label=expression(R^2~"= 0.46"),size = 3)+
+  annotate(geom = 'text',x = 6,y = -10,label=expression(Slope~"= 1.00"),size = 3)+
+  theme(text = element_text(size = 8))
+
+councilch4.4 
+
+```
+
+
+
+
+#Plots and Validation
+```{r,error=FALSE,warning=FALSE}
+#changed to FCH4.c to use re-cleaned data 
+#Plots modeled vs real data among several dates to observe agreement 
+
+ggplot(data = cf)+theme_bw()+
+  geom_point(aes(date,rfch4.2,col='RF'),alpha=0.5)+
+  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
+  labs(title = "FCH4 2019 July 1 - July 30")+
+  scale_x_datetime(limits = as.POSIXct(c("2019-07-01","2019-07-30")))
+ # scale_y_continuous(limits = c(-0.05,0.05))
+
+ggplot(data = cf)+theme_bw()+
+  geom_point(aes(date,rfch4.2,col='RF'),alpha=0.5)+
+  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
+   labs(title = "FCH4 2017")+
+  scale_x_datetime(limits = as.POSIXct(c("2017-01-01","2017-12-30")))
+ # scale_y_continuous(limits = c(-0.05,0.05))
+
+ggplot(data = cf)+theme_bw()+
+  geom_point(aes(date,rfch4.2,col='RF'),alpha=0.5)+
+  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
+  labs(title = "FCH4 2018")+
+  scale_x_datetime(limits = as.POSIXct(c("2018-01-01","2018-12-30")))
+ # scale_y_continuous(limits = c(-0.05,0.05))
+
+ggplot(data = cf)+theme_bw()+
+  geom_point(aes(date,rfch4.2,col='RF'),alpha=0.5)+
+  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
+  labs(title = "FCH4 2019")+
+  scale_x_datetime(limits = as.POSIXct(c("2019-01-01","2019-12-30")))
+ # scale_y_continuous(limits = c(-0.05,0.05))
+
+ggplot(data = cf)+theme_bw()+
+  geom_point(aes(date,rfch4.2,col='RF'),alpha=0.5)+
+  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
+  labs(title = "FCH4 2020")+
+  scale_x_datetime(limits = as.POSIXct(c("2020-01-01","2020-12-30")))
+ # scale_y_continuous(limits = c(-0.05,0.05))
+
+ggplot(data = cf)+theme_bw()+
+  geom_point(aes(date,rfch4.2,col='RF'),alpha=0.5)+
+  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
+  labs(title = "FCH4 2021")+
+  scale_x_datetime(limits = as.POSIXct(c("2021-01-01","2021-12-30")))
+ # scale_y_continuous(limits = c(-0.05,0.05))
+
+ggplot(data = cf)+theme_bw()+
+  geom_point(aes(date,rfch4.2,col='RF'),alpha=0.5)+
+  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
+  labs(title = "FCH4 2022")+
+  scale_x_datetime(limits = as.POSIXct(c("2022-01-01","2022-12-30")))
+ # scale_y_continuous(limits = c(-0.05,0.05))
+
+
+ggplot(data = cf)+theme_bw()+
+  geom_point(aes(date,rfch4.2,col='RF'),alpha=0.5)+
+  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.5)+
+  labs(title = "FCH4 2023")+
+  scale_x_datetime(limits = as.POSIXct(c("2023-01-01","2023-12-30")))
+ # scale_y_continuous(limits = c(-0.05,0.05))
+
+
+ggplot(data = cf)+theme_bw()+
+  geom_point(aes(date,rfch4.2,col='RF'),alpha=0.2)+
+  geom_point(aes(date,FCH4.c,col='Real'),alpha=0.2)
+
+
+```
+
+
+
 
 #Observing agreement between modeled and real NEE and CH4 flux data 
 ```{r}

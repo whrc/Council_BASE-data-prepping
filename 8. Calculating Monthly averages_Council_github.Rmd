@@ -32,7 +32,10 @@ library(openair)
 
 #read in cleaned and Ameriflux prepped half-hourly dataset
 ```{r}
-df = fread(input = "C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/US-NGC2_HH_201701010000_202309010000.csv", na.strings="-9999") 
+#commented out - updated version following adding wind direction to RF in Github folder 
+#df = fread(input = "C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/US-NGC2_HH_201701010000_202309010000.csv", na.strings="-9999") 
+
+df = fread(input = "C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/US-NGC2_HH_201701010000_202309010000.csv", na.strings = "-9999")
            
 ##na.strings = c('-9999','NA','NaN','NAN','-7999')
 
@@ -168,7 +171,7 @@ plot(df_monthly_avg$TS_3_1_1, df_monthly_avg$GPP_F)
 
 ```{r}
 
-write.csv(x = df_monthly_avg,file = './council_monthly_AVG_gapfilled_clean_2017_2023_for analysis.csv',quote = F,row.names = F)
+write.csv(x = df_monthly_avg,file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_monthly_AVG_gapfilled_clean_2017_2023_for analysis.csv',quote = F,row.names = F)
 
 
 

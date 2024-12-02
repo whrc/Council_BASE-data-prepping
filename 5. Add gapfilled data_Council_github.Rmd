@@ -20,16 +20,26 @@ Sys.setenv(TZ='UTC')
 
 #read the ungapfilled data so it can be merged with the gapfilled data 
 ```{r}
+dat.h =fread("C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/data/council-Results_data_2017_2023.txt", header = T, nrows = 0) #header
 
-dat = fread('./council_2017_2023_gf.csv')
+dat =fread("C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/data/council-Results_data_2017_2023.txt", header = F, skip = 2) #removes the row with the units
+
+names (dat) = names (dat.h) #binds header and df without units together 
+
+#dat = fread('./council_2017_2023_gf.csv')
+
 ```
 
 
 #read in the gapfilled data / gapfilling output 
 ```{r}
-gfh  = fread('./data/council-Results_data_2017_2023.txt',header = T,nrows = 0) #reads in gap-filled data 
-gf   = fread('./data/council-Results_data_2017_2023.txt',header = F,skip  = 2,na.strings = c('-9999','-10000','-9.9990e+03')) #adjusts for NAs
+gfh  = fread('C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/data/council-Results_data_2017_2023.txt',header = T,nrows = 0) #reads in gap-filled data names  
+
+gf   = fread('C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/data/council-Results_data_2017_2023.txt',header = F,skip  = 2,na.strings = c('-9999','-10000','-9.9990e+03')) #adjusts for NAs
+
 names(gf) = names(gfh)
+
+
 ```
 
 #break apart the time column
@@ -41,6 +51,19 @@ time = paste(hour,min,sep = ':')
 date = paste(gf$Year,gf$DoY,sep = '-')
 ts   = as.POSIXct(paste(date,time,sep = ' '),format = '%Y-%j %H:%M')
 gf$ts = ts
+
+summary(gf$ts)
+
+hour = floor(x = dat$Hour)
+dif = dat$Hour - hour
+min = dif*60
+time = paste(hour,min,sep = ':')
+date = paste(dat$Year,dat$DoY,sep = '-')
+ts   = as.POSIXct(paste(date,time,sep = ' '),format = '%Y-%j %H:%M')
+dat$ts = ts
+
+summary(dat$ts)
+
 ```
 
 #reduce the gapfilled dataset to the variables of interest 
@@ -84,7 +107,8 @@ names(gfdat) = c('ts',
 
 #merge the ungapfilled data with the gapfilled data 
 ```{r}
-dat = merge(dat,gfdat,by = 'ts')
+
+dat = merge(dat,gfdat, by = 'ts')
 dat$dup = duplicated(x = dat$ts)
 dat = subset(dat,dat$dup == 'FALSE')
 
@@ -94,6 +118,6 @@ summary(dat$ts) #check out timestamp to make sure it looks correct
 #save as new file 
 ```{r}
 
-write.csv(x = dat,file = './council_gapfilled_clean_2017_2023.csv',quote = F,row.names = F)
+write.csv(x = dat,file = 'C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/data/council_gapfilled_clean_2017_2023.csv',quote = F,row.names = F)
 ```
 

@@ -28,7 +28,7 @@ setwd('C:/Users/karndt.WHRC/Desktop/sites/council/data') #use this to set your d
 #Prep for Reddy for an initial gap filling
 #Load in gapfilled data from previous step 
 ```{r}
-dat = fread('./council_2017_2023_gf.csv')
+dat = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_2017_2023_gf.csv')
 ```
 
 #Create useable time variables 
@@ -116,7 +116,7 @@ reddy2 = reddy2[complete.cases(reddy2$Year),]
 
 #save new file
 ```{r}
-write.table(x = reddy2,file = './reddy_council_2017_2023.txt',row.names = F,sep = '\t',quote = F,na = '-9999') 
+write.table(x = reddy2,file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/reddy_council_2017_2023.txt',row.names = F,sep = '\t',quote = F,na = '-9999') 
 ```
 
 

@@ -182,7 +182,7 @@ plot(boruta,las = 2)
 ```
 
 
-####Lets try to fill with random forest
+####Lets try to fill NEE with random forest
 ```{r,error=FALSE,warning=FALSE}
 #use 80% of data set as training set and 20% as test set
 sample.nee = sample(c(TRUE, FALSE), nrow(cc), replace=TRUE, prob=c(0.8,0.2))
@@ -431,7 +431,7 @@ summary(lm(test.data.ch4$FCH4.c ~ test.data.ch4$rfch4)) #R2 = 0.44, slope = 1.02
 
 #added wd (degrees)
 test.data.ch4.2 = merge(test.ch4,cf,by = 'date',all.x = T)
-summary(lm(test.data.ch4$FCH4.c ~ test.data.ch4$rfch4.2)) #R2 = 0.47, slope = 1.01 
+summary(lm(test.data.ch4.2$FCH4.c ~ test.data.ch4.2$rfch4.2)) #R2 = 0.47, slope = 1.01 
 
 councilch4.2= ggplot(data = test.data.ch4,aes(rfch4.2,FCH4.c))+theme_bw()+
   geom_hline(yintercept = 0,lty=2)+
@@ -566,13 +566,20 @@ ggplot(data = cf)+theme_bw()+
 library(cowplot)
 
 #png(filename = 'C:/Users/karndt.WHRC/Desktop/sites/YKD/plots/2023 yk2unburned gapfilling validation.png',width = 6,height = 4,units = 'in',res = 1000)
-plot_grid(councilnee,councilch4)
+plot_grid(councilnee2,councilch4.2)
 #dev.off()
 ```
+#Rename refnee.2 and fch4.2
+```{r}
+library(dplyr)
+cf <- cf %>%
+  rename(rfnee = rfnee.2, rfch4 = rfch4.2)
+```
+
 
 #Save the gapfilled data 
 ```{r,error=FALSE,warning=FALSE}
-write.csv(x = cf,file = "./council_2017_2023_gf.csv",row.names = F) #_gf to indicate it's been gapfilled 
+#write.csv(x = cf,file = "./council_2017_2023_gf.csv",row.names = F) #_gf to indicate it's been gapfilled 
 write.csv(x= cf, file = "C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_2017_2023_gf.csv")
 ```
 

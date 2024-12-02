@@ -123,6 +123,7 @@ plot(df_avg$date, df_avg$RECO)
 plot(df_avg$date, df_avg$FC_night_F)
 
 plot(df_avg$TS_3_1_1, df_avg$FC_night_F)
+plot(df_avg$TA_ERA5, df_avg$FC_night_F)
 
 ```
 

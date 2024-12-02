@@ -21,7 +21,7 @@ setwd() #use this to set your directory
 #help("REddyProc-package") - load in the Reddy dataset from previous step 
 ```{r}
   #+++ Load data with one header and one unit row from (tab-delimited) text file
-    EddyData.F <- fLoadTXTIntoDataframe('./reddy_council_2017_2023.txt')
+    EddyData.F <- fLoadTXTIntoDataframe('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/reddy_council_2017_2023.txt')
   # note: use \code{fFilterAttr} to subset rows while keeping the units attributes
 ```
 
@@ -197,7 +197,7 @@ FilledEddyData.F <- EddyProc.C$sExportResults()
 
 #save as new file
 ```{r}
- #save as new file
+ #save as new file 
 
 fWriteDataframeToFile(CombinedData.F, 'council-Results_data_2017_2023.txt', 'data')
 ```

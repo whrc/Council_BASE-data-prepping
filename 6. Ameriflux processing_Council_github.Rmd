@@ -134,6 +134,10 @@ TS_3_1_1 = df$TS_3_1_1.c
 TS_4_1_1 = df$TS_4_1_1.c
 TS_5_1_1 = df$TS_5_1_1 #this one is new, no cleaned version, need to look up what this is (10.29.24*)
 
+#Adding in ERA5 temps to supplement missing site temps 
+TA_ERA5 = df$Tair_f
+TS_ERA5 = df$Tsoil_f
+
 
 #wind and turbulence parameters ##############################
 df$Tau.c
@@ -210,13 +214,15 @@ plot(GPP_F)
 plot(RECO)
 plot(RECO_F)
 
+
 ```
 
 ```{r}
 plot(G_1_1_1)
 #plot(G_2_1_1)
 #plot(G_3_1_1)
-
+plot(TA_ERA5)
+plot(TS_ERA5)
 plot(H)
 plot(LE)
 ```
@@ -269,6 +275,9 @@ plot(USTAR)
 plot(WD)
 plot(WS)
 plot(WS_MAX)
+
+
+
 ```
 
 ```{r}
@@ -282,7 +291,7 @@ plot(WS_MAX)
 #merge everything into a nice and neat file 
 ```{r}
 #checking variables in df to make sure names are present / match
-#df$P
+
 
 #Create new df with the variables you want -- Council site = US-NGC in Ameriflux 
 US_NGC2 = data.frame(TIMESTAMP_START,TIMESTAMP_END,
@@ -316,6 +325,8 @@ US_NGC2 = data.frame(TIMESTAMP_START,TIMESTAMP_END,
 ,TS_3_1_1
 ,TS_4_1_1
 ,TS_5_1_1
+,TA_ERA5 #added to supplement missing temp data from site 
+,TS_ERA5 #added to supplement missing temp data from site 
 ,MO_LENGTH,ZL,TAU,U_SIGMA,V_SIGMA,W_SIGMA,USTAR,WD,WS,WS_MAX)
 #,FC_SSITC_TEST,FCH4_SSITC_TEST,H_SSITC_TEST,LE_SSITC_TEST,TAU_SSITC_TEST)
 ```

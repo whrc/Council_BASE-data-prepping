@@ -43,15 +43,18 @@ cf = cf[complete.cases(cf$airt.eramod),]
 #create a sub data frame of the variables you want for a neural network (random forest)
 #KK Nov 27: added in u, v, wd, and cardinal direction from era df; also changed FC and FCH4 to FC.c, FCH4.c, and SWC_1_1_1.c to use re-cleaned data --> adj to WD from actual data and Cardinal_Direction from actual data as these seem to be era5 data adj by actual data and this uses the actual SWC data from site.
 #####
-#should I be using the variables from the era5 or the actual site data for this neural network training? **ASK KYLE 
-#need no NAs to be able to use this as a predictor in RF....so might have to try era5 version or drop NA's?***************
 
 
 #create subset of the variables wanted for training RF
 ncf = data.frame(cf$date,cf$FC.c,cf$FCH4.c,
                  cf$airt.eramod, cf$wd, cf$cardinal_direction, cf$rh.eramod,cf$rad.eramod,
-                 cf$ws.eramod,cf$tsoil.eramod,cf$SWC_1_1_1.c,
+                 cf$ws.eramod,cf$tsoil.eramod,#cf$SWC_1_1_1.c,cf$SWC_2_1_1.c, 
+                 cf$SWC_3_1_1.c,
                  cf$h.eramod,cf$le.eramod)
+#SWC also broken up by location
+#  SWC_1_1_1 % Soil water content (15cm depth) – margin pond
+# SWC_2_1_1 % Soil water content (15cm depth) – lichen/berries
+# SWC_3_1_1 % Soil water content (15cm depth) - tussock ***** switch to using this one ** (used SWC1 before, by margin pond, switching to SWC3, tussock)
 
 #another way to subset a new df 
 # library(dplyr)
@@ -88,6 +91,8 @@ ncf$vpd = ((100 - ncf$rh)/100)*svp
 
 #create training dataset and testing dataset 
 ```{r}
+#*KK edit 12/27/24 - changing to SWC3 to reflect tussock 
+
 set.seed(123)#sets the start point of models, good for repeatability
 cc = ncf[complete.cases(ncf$swc),]#create a gap free data set of the target variable
 
@@ -102,6 +107,7 @@ hist(train$swc)
 hist(test$swc)
 
 #run random forest to predict missing SWC values - leave out or include wd? included wd here* 
+
 rf.swc = randomForest(formula = swc ~ tair + rh + rg + ws + wd + tsoil + vpd + le + h,data = train,ntree = 150)
 #tried various tree numbers, no sig improvement after 300....very minimal diff between 150 and 300, and 150 looks slightly better.
 
@@ -138,7 +144,7 @@ ggplot(data = val,aes(swc.rf,swc.x))+theme_bw()+geom_abline(slope = 1,intercept 
   scale_y_continuous(limits = c(0,70),"Measured SWC (%)")
 
 #summary stats on gap filling
-summary(lm(val$swc.x ~ val$swc.rf)) #R2 = 0.943
+summary(lm(val$swc.x ~ val$swc.rf)) #R2 = 0.97, slope = 1.02
 
 #create final gap free soil moisture
 ncf$swc = ifelse(is.na(ncf$swc),ncf$swc.rf,ncf$swc)
@@ -180,6 +186,25 @@ boruta = Boruta(nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h,data
 #kyle commented this out, looks at the boruta output
 plot(boruta,las = 2)
 ```
+#Determining number of trees for RF 
+```{r}
+# Train the Random Forest model with a large number of trees
+rf_model <- randomForest(nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h, data = cc, ntree = 1000, importance = TRUE)
+
+# Extract variable importance
+importance_values <- importance(rf_model, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(rf_model, type = 1, main = "Variable Importance (%IncMSE)")
+
+# Evaluate performance with different numbers of trees
+error_rates <- rf_model$err.rate[, 1]
+plot(error_rates, type = "l", main = "Error Rate vs. Number of Trees", xlab = "Number of Trees", ylab = "Error Rate")
+```
+
 
 
 ####Lets try to fill NEE with random forest
@@ -193,7 +218,7 @@ hist(cc$nee)
 hist(train.nee$nee)
 hist(test.nee$nee)
 
-sum(is.na(cc$swc)) #make sure there are no NAs in dataset or RF model won't work 
+#sum(is.na(cc$swc)) #make sure there are no NAs in dataset or RF model won't work 
 
 
 #original, no wind 
@@ -220,6 +245,27 @@ pnee.3 = predict(object = rfnee.3,newdata = ncf)
 cf$rfnee.3 = pnee.3
 ```
 
+
+#Checking variable importance using IncMSE
+```{r}
+#Higher %IncMSE: A higher %IncMSE value means that the variable is more important for the model. Removing this variable would result in a larger increase in the model's prediction error.
+#Lower %IncMSE: A lower %IncMSE value means that the variable is less important. Removing this variable would result in a smaller increase in the model's prediction error.
+
+
+# Train the Random Forest model
+rf_model_nee <- randomForest(nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h, data = train.nee, importance = TRUE, ntree = 150)
+
+# Extract variable importance
+importance_values <- importance(rf_model_nee, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(rf_model_nee, type = 1, main = "Variable Importance (%IncMSE)")
+
+#Most important variables for NEE are wd (49.81), swc (49.11), ws(41.35)
+```
 
 ####Time series plots
 ```{r,error=FALSE,warning=FALSE}
@@ -400,6 +446,25 @@ rfch4.4 = randomForest(formula = fch4 ~ tair + rh + rg + ws + wd + cardDir + tso
 pch4.4 = predict(object = rfch4.4,newdata = ncf)
 
 cf$rfch4.4 = pch4.4
+```
+#IncMSE for CH4 variable importance 
+```{r}
+#Higher %IncMSE: A higher %IncMSE value means that the variable is more important for the model. Removing this variable would result in a larger increase in the model's prediction error.
+#Lower %IncMSE: A lower %IncMSE value means that the variable is less important. Removing this variable would result in a smaller increase in the model's prediction error.
+
+
+# Train the Random Forest model - same as rfch4.2 model above 
+rf_model_CH4 = randomForest(formula = fch4 ~ tair + rh + rg + ws + wd + tsoil + vpd + swc + h + le, data = train.ch4,importance = TRUE, ntree = 150)
+# Extract variable importance
+importance_values <- importance(rf_model_CH4, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values)
+
+# Plot the importance values
+varImpPlot(rf_model_CH4, type = 1, main = "Variable Importance (%IncMSE)")
+
+#Most important variables for NEE are swc (81.04), wd (69.06), ws (63.37)
 ```
 
 #Validation - looking at agreement between modeled data and real data 

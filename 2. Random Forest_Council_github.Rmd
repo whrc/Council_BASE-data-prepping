@@ -37,7 +37,7 @@ cf = cf[complete.cases(cf$airt.eramod),]
 
 ```
 
-#Create subset of data to use for RF training -- use only ERA5 variables for training (unless it's a target variable? Use ERA5 wd or site wd with lots of NAs? *Ask Kyle)
+#Create subset of data to use for RF training -- use only ERA5 variables for training since RF needs a continuous dataset (no NAs)
 
 ```{r}
 #create a sub data frame of the variables you want for a neural network (random forest)
@@ -170,26 +170,53 @@ ncf$swc = ifelse(is.na(ncf$swc),ncf$swc.rf,ncf$swc)
 #create final gap free soil moisture
 #ncf$swc = ifelse(is.na(ncf$swc),ncf$swc.rf,ncf$swc)
 ```
-#NEE 
+
+
+#NEE *********************
+
+####Look at range of data 
+```{r}
+ggplot(data = ncf, aes(x=date, y = nee)) + geom_point()
+
+```
+
 
 ####Create NEE dataset & Examine variable importance
 ```{r}
 set.seed(123)
 cc = ncf[complete.cases(ncf$nee),] #complete NEE data only 
-cc = subset(cc,cc$nee < 12 & cc$nee > -14) #setting some limits on the spread of data to exclude some of those large outliers and tidy up the model 
+cc = subset(cc,cc$nee < 12 & cc$nee > -14) #the range of nee for ncf dataset is -16 - 10 and there are no real major outliers, so this range captures the data well, otherwise use these to set limits on the spread of data to exclude  large outliers and tidy up the model - may need to adjust these limits based on your data*
 
 #this attempts to establish which of the variables have the most important influence on NEE - kyle commented this out, may not be necessary & can take a little while to run but cool to see 
 
 #added in wd (degrees)
 boruta = Boruta(nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h,data = cc,doTrace = 2,maxRuns = 100)
 
-#kyle commented this out, looks at the boruta output
+#plots the variable importance from boruta 
 plot(boruta,las = 2)
 ```
-#Determining number of trees for RF 
+
+#Let's try to fill NEE with random forest
+
+####Create training and testing dataset 
+```{r,error=FALSE,warning=FALSE}
+#use 80% of data set as training set and 20% as test set
+sample.nee = sample(c(TRUE, FALSE), nrow(cc), replace=TRUE, prob=c(0.8,0.2))
+train.nee  = cc[sample.nee, ]
+test.nee   = cc[!sample.nee, ]
+
+#Make sure the patterns here look similar so you know the training and testing datasets are representative of the overall dataset 
+hist(cc$nee)
+hist(train.nee$nee)
+hist(test.nee$nee)
+
+#sum(is.na(cc$swc)) #make sure there are no NAs in dataset or RF model won't work 
+```
+
+####Determining number of trees for RF 
 ```{r}
 # Train the Random Forest model with a large number of trees
-rf_model <- randomForest(nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h, data = cc, ntree = 1000, importance = TRUE)
+rf_model <- randomForest(nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h, data = train.nee, ntree = 1000, importance = TRUE)
 
 # Extract variable importance
 importance_values <- importance(rf_model, type = 1)  # type = 1 for %IncMSE
@@ -206,20 +233,7 @@ plot(error_rates, type = "l", main = "Error Rate vs. Number of Trees", xlab = "N
 ```
 
 
-
-####Lets try to fill NEE with random forest
-```{r,error=FALSE,warning=FALSE}
-#use 80% of data set as training set and 20% as test set
-sample.nee = sample(c(TRUE, FALSE), nrow(cc), replace=TRUE, prob=c(0.8,0.2))
-train.nee  = cc[sample.nee, ]
-test.nee   = cc[!sample.nee, ]
-
-hist(cc$nee)
-hist(train.nee$nee)
-hist(test.nee$nee)
-
-#sum(is.na(cc$swc)) #make sure there are no NAs in dataset or RF model won't work 
-
+```{r}
 
 #original, no wind 
 rfnee = randomForest(formula = nee ~ tair + cardDir + rh + rg + ws + tsoil + swc + vpd + le + h,data = train.nee,ntree = 150,importance=T)

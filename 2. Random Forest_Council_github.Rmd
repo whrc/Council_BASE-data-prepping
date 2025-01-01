@@ -17,7 +17,8 @@ knitr::opts_chunk$set(echo = TRUE,dev = 'png')
 
 #Load in required packages
 ```{r,error=FALSE,warning=FALSE}
-rm(list = ls())
+rm(list = ls()) #clear obj from environment 
+gc() #garbage collection to free up R memory
 library(data.table)
 library(ggplot2)
 library(caret)
@@ -49,7 +50,7 @@ cf = cf[complete.cases(cf$airt.eramod),]
 ncf = data.frame(cf$date,cf$FC.c,cf$FCH4.c,
                  cf$airt.eramod, cf$wd, cf$cardinal_direction, cf$rh.eramod,cf$rad.eramod,
                  cf$ws.eramod,cf$tsoil.eramod,#cf$SWC_1_1_1.c,cf$SWC_2_1_1.c, 
-                 cf$SWC_3_1_1.c,
+                 cf$SWC_3_1_1.c, #SWC 3 = the tussock location 
                  cf$h.eramod,cf$le.eramod)
 #SWC also broken up by location
 #  SWC_1_1_1 % Soil water content (15cm depth) – margin pond
@@ -213,37 +214,200 @@ hist(test.nee$nee)
 #sum(is.na(cc$swc)) #make sure there are no NAs in dataset or RF model won't work 
 ```
 
-####Determining number of trees for RF 
+#TO Do -- add in rf n=1000 data into merged dataset to plot and compare to tree = 150 -- re-run processing steps with new SWC -- re-run processing steps for just Methane based on pond margin, or just 2019 data?? 
+
+
+#Find the optimum number of trees for the RF model using minimum out-of-bag error (OOB error)
+#Can't get this to work, look over it with Kyle? 
+
 ```{r}
-# Train the Random Forest model with a large number of trees
-rf_model <- randomForest(nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h, data = train.nee, ntree = 1000, importance = TRUE)
 
-# Extract variable importance
-importance_values <- importance(rf_model, type = 1)  # type = 1 for %IncMSE
+library(randomForest)
 
-# Print the importance values
-print(importance_values)
 
-# Plot the importance values
-varImpPlot(rf_model, type = 1, main = "Variable Importance (%IncMSE)")
+rf_model_test <- randomForest(nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h, 
+                              data = train.nee, 
+                              ntree = 100, 
+                              importance = TRUE)
 
-# Evaluate performance with different numbers of trees
-error_rates <- rf_model$err.rate[, 1]
-plot(error_rates, type = "l", main = "Error Rate vs. Number of Trees", xlab = "Number of Trees", ylab = "Error Rate")
+# Check the structure of err.rate
+str(rf_model_test$err.rate) #returns NULL, which means error rate is possibly not included or not in the model config *Ask Kyle about this 
+
+
+
+#Code if error rate worked (but does not, so see alt code below)
+# Define a range of ntree values
+ntree_values <- seq(100, 1000, by = 50)  # Adjust the range and step as needed
+oob_errors <- numeric(length(ntree_values))  # Initialize a vector for storing OOB errors
+
+# Loop through ntree values and extract the final OOB error  -- can't get this portion to work
+for (i in seq_along(ntree_values)) {
+  rf_model_ntree <- randomForest(nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h, 
+                           data = train.nee, 
+                           ntree = ntree_values[i], 
+                           importance = TRUE)
+  
+  # Extract the final OOB error (last row corresponds to the last tree)
+  oob_errors[i] <- rf_model_ntree$err.rate[nrow(rf_model_ntree$err.rate), "OOB"]
+}
+
+# Find the optimal number of trees
+optimal_ntree <- ntree_values[which.min(oob_errors)]
+
+# Plot the OOB errors
+plot(ntree_values, oob_errors, type = "b", pch = 19, col = "blue",
+     xlab = "Number of Trees (ntree)", ylab = "OOB Error",
+     main = "Optimal ntree for Random Forest")
+abline(v = optimal_ntree, col = "red", lty = 2)  # Add a vertical line for the optimal ntree
+
+# Print the optimal number of trees
+cat("Optimal number of trees:", optimal_ntree, "\n")
+
+
+
+#Alt code for calculating OOB error  ---> this was running for 24 hours and was still not complete, trying the alternate code in the chunk below to try and optimize 
+
+# Define a range of ntree values
+ntree_values <- seq(100, 1000, by = 50)
+oob_errors <- numeric(length(ntree_values))  # Initialize a vector for OOB errors
+
+# Loop through ntree values and calculate OOB error
+for (i in seq_along(ntree_values)) {
+  rf_model <- randomForest(nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h, 
+                           data = train.nee, 
+                           ntree = ntree_values[i], 
+                           importance = TRUE)
+  
+  # Predict OOB data
+  oob_pred <- predict(rf_model, train.nee, type = "response", predict.all = TRUE)
+  
+  # Calculate OOB error as RMSE
+  oob_error <- sqrt(mean((train.nee$nee - oob_pred$aggregate)^2, na.rm = TRUE))
+  oob_errors[i] <- oob_error
+}
+
+# Find the optimal number of trees
+optimal_ntree <- ntree_values[which.min(oob_errors)]
+
+# Plot the OOB errors
+plot(ntree_values, oob_errors, type = "b", pch = 19, col = "blue",
+     xlab = "Number of Trees (ntree)", ylab = "OOB RMSE",
+     main = "Optimal ntree for Random Forest")
+abline(v = optimal_ntree, col = "red", lty = 2)  # Add a vertical line for the optimal ntree
+
+# Print the optimal number of trees
+cat("Optimal number of trees:", optimal_ntree, "\n")
+
+
+
+```
+#Parallel progress for calculating OOB error based on number of RF trees 
+```{r}
+library(doSNOW)
+library(foreach)
+library(parallel)
+library(doParallel)
+
+# Define the number of trees and prepare progress bar
+ntree_values <- seq(100, 1000, by = 100) # Example range of trees
+pb <- txtProgressBar(min = 0, max = length(ntree_values), style = 3)
+
+# Initialize cluster and progress bar
+cl <- makeCluster(detectCores() - 1) # Use all but one core
+registerDoSNOW(cl)
+
+# Function to run Random Forest and track progress
+oob_errors <- foreach(ntree = ntree_values, .combine = c, .packages = "randomForest", .options.snow = list(progress = function(n) setTxtProgressBar(pb, n))) %dopar% {
+  model <- randomForest(nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h, 
+                        data = train.nee, 
+                        ntree = ntree, 
+                        importance = TRUE)
+  tail(model$err.rate[, 1], 1) # Get the final OOB error
+}
+
+# Close progress bar and cluster
+close(pb)
+stopCluster(cl)
+
+# Plot OOB errors vs. number of trees
+plot(ntree_values, oob_errors, type = "b", xlab = "Number of Trees", ylab = "OOB Error")
+
+
+
+print(ntree_values) # correct 100 - 1000 by 100
+print(oob_errors)
+length(ntree_values) == length(oob_errors)
+
+#testing OOB error
+library(foreach)
+result <- foreach(i = 1:5, .combine = c) %dopar% {
+  i^2
+}
+print(result)  # Should return 1, 4, 9, 16, 25
+
+#checking parallel backend 
+oob_errors <- foreach(ntree = ntree_values, .combine = c, 
+                      .packages = "randomForest", 
+                      .options.snow = list(progress = function(n) setTxtProgressBar(pb, n))) %dopar% {
+  print(ntree)  # Check which ntree value is being processed
+  model <- randomForest(nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h, 
+                        data = train.nee, 
+                        ntree = ntree, 
+                        importance = TRUE)
+  tail(model$err.rate[, 1], 1)  # Return the final OOB error
+}
+
+
 ```
 
 
+
+####1000 trees for RF -- have the original 150 trees in code chunks below...
+```{r}
+# Train the Random Forest model with a large number of trees
+rf_model_1000 <- randomForest(nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h, data = train.nee, ntree = 1000, importance = TRUE)
+
+pnee.1000 = predict(object = rf_model_1000,newdata = ncf)
+
+cf$rf_model_ntree = pnee.1000
+
+# Extract variable importance
+importance_values_ntree <- importance(rf_model_ntree, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values_ntree)
+#Results:
+#         %IncMSE
+# tair   43.41093
+# rh     92.00179 --> fourth
+# rg     47.39703
+# ws     98.81765  --> third 
+# wd    128.92794 --> second most important
+# tsoil  82.74165
+# swc   138.27417 ----> most important 
+# vpd    49.63176
+# le     62.56852
+# h      83.76193
+
+
+# Plot the importance values
+varImpPlot(rf_model_ntree, type = 1, main = "Variable Importance (%IncMSE)")
+
+  
+```
+
+#Training RF; *ended up using the model with "wd" - changed SWC to tussock location 
 ```{r}
 
 #original, no wind 
-rfnee = randomForest(formula = nee ~ tair + cardDir + rh + rg + ws + tsoil + swc + vpd + le + h,data = train.nee,ntree = 150,importance=T)
+# rfnee = randomForest(formula = nee ~ tair + cardDir + rh + rg + ws + tsoil + swc + vpd + le + h,data = train.nee,ntree = 150,importance=T)
+# 
+# pnee = predict(object = rfnee,newdata = ncf)
+# 
+# cf$rfnee = pnee
 
-pnee = predict(object = rfnee,newdata = ncf)
 
-cf$rfnee = pnee
-
-
-#using just wd (no cardDir)
+#using just wd (no cardDir) ---- using this one **************
 rfnee.2 = randomForest(formula = nee ~ tair + cardDir + rh + rg + ws + wd + tsoil + swc + vpd + le + h,data = train.nee,ntree = 150,importance=T)
 
 pnee.2 = predict(object = rfnee.2,newdata = ncf)
@@ -252,11 +416,11 @@ cf$rfnee.2 = pnee.2
 
 
 #trying with just cardinal directions (no wd)
-rfnee.3 = randomForest(formula = nee ~ tair + cardDir + rh + rg + ws + cardDir + tsoil + swc + vpd + le + h,data = train.nee,ntree = 150,importance=T)
-
-pnee.3 = predict(object = rfnee.3,newdata = ncf)
-
-cf$rfnee.3 = pnee.3
+# rfnee.3 = randomForest(formula = nee ~ tair + cardDir + rh + rg + ws + cardDir + tsoil + swc + vpd + le + h,data = train.nee,ntree = 150,importance=T)
+# 
+# pnee.3 = predict(object = rfnee.3,newdata = ncf)
+# 
+# cf$rfnee.3 = pnee.3
 ```
 
 
@@ -285,19 +449,19 @@ varImpPlot(rf_model_nee, type = 1, main = "Variable Importance (%IncMSE)")
 ```{r,error=FALSE,warning=FALSE}
 #This overlays the random forest modeled data points with the real data points so you can observe model agreement 
 
-#plot of certain timeframe - no wind 
-ggplot(data = cf)+theme_bw()+
-  geom_point(aes(date,rfnee,col='RF'),alpha=0.2)+
-  geom_point(aes(date,FC.c,col='Real'),alpha=0.2)+
-  scale_x_datetime(limits = as.POSIXct(c("2019-06-15","2019-06-30")))
-#plot of all years 
-ggplot(data = cf)+theme_bw()+
-  geom_point(aes(date,rfnee,col='RF'),alpha=0.2)+
-  geom_point(aes(date,FC.c,col='Real'),alpha=0.2)+
-  geom_hline(yintercept = 0)
+# #plot of certain timeframe - no wind 
+# ggplot(data = cf)+theme_bw()+
+#   geom_point(aes(date,rfnee,col='RF'),alpha=0.2)+
+#   geom_point(aes(date,FC.c,col='Real'),alpha=0.2)+
+#   scale_x_datetime(limits = as.POSIXct(c("2019-06-15","2019-06-30")))
+# #plot of all years 
+# ggplot(data = cf)+theme_bw()+
+#   geom_point(aes(date,rfnee,col='RF'),alpha=0.2)+
+#   geom_point(aes(date,FC.c,col='Real'),alpha=0.2)+
+#   geom_hline(yintercept = 0)
 
 
-#plot of certain timeframes using wd (degrees) 
+#plot of certain timeframes using wd (degrees) -- used this version of the model 
 ggplot(data = cf)+theme_bw()+
   geom_point(aes(date,rfnee.2,col='RF'),alpha=0.2)+
   geom_point(aes(date,FC.c,col='Real'),alpha=0.2)+
@@ -311,18 +475,18 @@ ggplot(data = cf)+theme_bw()+
     labs(title = "with WD (degrees)")
 
 
-#plot of certain timeframe - cardinal directions, no wd  
-ggplot(data = cf)+theme_bw()+
-  geom_point(aes(date,rfnee.3,col='RF'),alpha=0.2)+
-  geom_point(aes(date,FC.c,col='Real'),alpha=0.2)+
-  labs(title = "Cardinal Direction (no wd)")+
-  scale_x_datetime(limits = as.POSIXct(c("2019-06-15","2019-06-30")))
-#plot of all years 
-ggplot(data = cf)+theme_bw()+
-  geom_point(aes(date,rfnee.3,col='RF'),alpha=0.2)+
-  geom_point(aes(date,FC.c,col='Real'),alpha=0.2)+
-  geom_hline(yintercept = 0)+
-  labs(title = "Cardinal Direction (no wd)")
+# #plot of certain timeframe - cardinal directions, no wd  
+# ggplot(data = cf)+theme_bw()+
+#   geom_point(aes(date,rfnee.3,col='RF'),alpha=0.2)+
+#   geom_point(aes(date,FC.c,col='Real'),alpha=0.2)+
+#   labs(title = "Cardinal Direction (no wd)")+
+#   scale_x_datetime(limits = as.POSIXct(c("2019-06-15","2019-06-30")))
+# #plot of all years 
+# ggplot(data = cf)+theme_bw()+
+#   geom_point(aes(date,rfnee.3,col='RF'),alpha=0.2)+
+#   geom_point(aes(date,FC.c,col='Real'),alpha=0.2)+
+#   geom_hline(yintercept = 0)+
+#   labs(title = "Cardinal Direction (no wd)")
 
 #Results very similar, also seems to be predicting slightly lower/more conservative nee compared to site data 
 ```
@@ -334,7 +498,26 @@ ggplot(data = cf)+theme_bw()+
 test.data.nee = merge(test.nee,cf,by = 'date',all.x = T)
 summary(lm(test.data.nee$FC.c ~ test.data.nee$rfnee)) #R2 = 0.64, slope = 1.02
 
-councilnee = ggplot(data = test.data.nee,aes(rfnee,FC.c))+theme_bw()+
+# councilnee = ggplot(data = test.data.nee,aes(rfnee,FC.c))+theme_bw()+
+#   geom_hline(yintercept = 0,lty=2)+
+#   geom_vline(xintercept = 0,lty=2)+
+#   geom_point(alpha=0.2)+
+#   scale_fill_viridis_c()+
+#   geom_abline(slope = 1,intercept = 0,col='red',lty=1)+
+#   scale_x_continuous(limits = c(-20,20),expression('Random Forest NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
+#   scale_y_continuous(limits = c(-20,20),expression('Eddy Covariance NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
+#   annotate(geom = 'text',x = 6, y = -8,label=expression(R^2~"= 0.64"),size = 3)+
+#   annotate(geom = 'text',x = 6,y = -10,label=expression(Slope~"= 1.02"),size = 3)+
+#   theme(text = element_text(size = 8)) +
+#   labs(title = "Orig - no wind")
+# 
+# councilnee 
+
+#Added wd (degrees) - RF ntree = 150 
+test.data.nee = merge(test.nee,cf,by = 'date',all.x = T)
+summary(lm(test.data.nee$FC.c ~ test.data.nee$rfnee.2)) #R2 = 0.65, slope = 1.03
+
+councilnee2 = ggplot(data = test.data.nee,aes(rfnee.2,FC.c))+theme_bw()+
   geom_hline(yintercept = 0,lty=2)+
   geom_vline(xintercept = 0,lty=2)+
   geom_point(alpha=0.2)+
@@ -342,14 +525,14 @@ councilnee = ggplot(data = test.data.nee,aes(rfnee,FC.c))+theme_bw()+
   geom_abline(slope = 1,intercept = 0,col='red',lty=1)+
   scale_x_continuous(limits = c(-20,20),expression('Random Forest NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
   scale_y_continuous(limits = c(-20,20),expression('Eddy Covariance NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
-  annotate(geom = 'text',x = 6, y = -8,label=expression(R^2~"= 0.64"),size = 3)+
-  annotate(geom = 'text',x = 6,y = -10,label=expression(Slope~"= 1.02"),size = 3)+
+  annotate(geom = 'text',x = 6, y = -8,label=expression(R^2~"= 0.65"),size = 3)+
+  annotate(geom = 'text',x = 6,y = -10,label=expression(Slope~"= 1.03"),size = 3)+
   theme(text = element_text(size = 8)) +
-  labs(title = "Orig - no wind")
+  labs(title = "with WD (degrees)")
 
-councilnee 
+councilnee2 
 
-#Added wd (degrees)
+#Added wd (degrees) - RF ntree = 1000
 test.data.nee = merge(test.nee,cf,by = 'date',all.x = T)
 summary(lm(test.data.nee$FC.c ~ test.data.nee$rfnee.2)) #R2 = 0.65, slope = 1.03
 
@@ -369,23 +552,23 @@ councilnee2 = ggplot(data = test.data.nee,aes(rfnee.2,FC.c))+theme_bw()+
 councilnee2 
 
 #used cardinal direction only 
-test.data.nee = merge(test.nee,cf,by = 'date',all.x = T)
-summary(lm(test.data.nee$FC.c ~ test.data.nee$rfnee.3)) #R2 = 0.65, slope = 1.03
-
-councilnee3 = ggplot(data = test.data.nee,aes(rfnee.3,FC.c))+theme_bw()+
-  geom_hline(yintercept = 0,lty=2)+
-  geom_vline(xintercept = 0,lty=2)+
-  geom_point(alpha=0.2)+
-  scale_fill_viridis_c()+
-  geom_abline(slope = 1,intercept = 0,col='red',lty=1)+
-  scale_x_continuous(limits = c(-20,20),expression('Random Forest NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
-  scale_y_continuous(limits = c(-20,20),expression('Eddy Covariance NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
-  annotate(geom = 'text',x = 6, y = -8,label=expression(R^2~"= 0.65"),size = 3)+
-  annotate(geom = 'text',x = 6,y = -10,label=expression(Slope~"= 1.03"),size = 3)+
-  theme(text = element_text(size = 8))+
-  labs(title = "with wind cardinal direction")
-
-councilnee3 
+# test.data.nee = merge(test.nee,cf,by = 'date',all.x = T)
+# summary(lm(test.data.nee$FC.c ~ test.data.nee$rfnee.3)) #R2 = 0.65, slope = 1.03
+# 
+# councilnee3 = ggplot(data = test.data.nee,aes(rfnee.3,FC.c))+theme_bw()+
+#   geom_hline(yintercept = 0,lty=2)+
+#   geom_vline(xintercept = 0,lty=2)+
+#   geom_point(alpha=0.2)+
+#   scale_fill_viridis_c()+
+#   geom_abline(slope = 1,intercept = 0,col='red',lty=1)+
+#   scale_x_continuous(limits = c(-20,20),expression('Random Forest NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
+#   scale_y_continuous(limits = c(-20,20),expression('Eddy Covariance NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
+#   annotate(geom = 'text',x = 6, y = -8,label=expression(R^2~"= 0.65"),size = 3)+
+#   annotate(geom = 'text',x = 6,y = -10,label=expression(Slope~"= 1.03"),size = 3)+
+#   theme(text = element_text(size = 8))+
+#   labs(title = "with wind cardinal direction")
+# 
+# councilnee3 
 ```
 
 #Methane 

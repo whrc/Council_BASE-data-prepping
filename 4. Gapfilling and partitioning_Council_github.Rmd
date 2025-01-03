@@ -75,8 +75,8 @@ EddyProc.C$sMDSGapFill('Rg',    FillAll=F) #Fill only the gaps 'Rg'
   EddyProc.C$sMDSGapFill('Ustar', FillAll=F) #Fill only the gaps Ustar'
   EddyProc.C$sMDSGapFill('H',     FillAll=F) #Fill only the gaps for H'
   EddyProc.C$sMDSGapFill('LE',    FillAll=F) #Fill only the gaps for 'LE'
-  EddyProc.C$sMDSGapFill('NEE',   FillAll=T) #Fill all values to estimate flux uncertainties #originally T
-  EddyProc.C$sMDSGapFill('CH4',   FillAll=T)  #Fill all values to estimate flux uncertainties #originally T 
+  EddyProc.C$sMDSGapFill('NEE',   FillAll=T) #Fill all values to estimate flux uncertainties #can set to F if you need this to run faster
+  EddyProc.C$sMDSGapFill('CH4',   FillAll=T)  #Fill all values to estimate flux uncertainties #can set to F if you need this to run faster
 ```
 
 #Example plots of filled data to screen or to directory \plots (optional)
@@ -90,12 +90,11 @@ EddyProc.C$sMDSGapFill('Rg',    FillAll=F) #Fill only the gaps 'Rg'
 ```{r}
 #This attempts another way to constrain the data / partition, but based on constraints set in step #3, it may or may not work if a temperature sensitivity cannot be identified 
   EddyProc.C$sMRFluxPartition()	# night time partitioning -> Reco, GPP
-  EddyProc.C$sGLFluxPartition()	# day time partitioning -> Reco_DT, GPP_DT Lasslop,
+  EddyProc.C$sGLFluxPartition()	# day time partitioning -> Reco_DT, GPP_DT Lasslop, --> this doesn't work, even with some tweaking NEE bounds, move on for now
   
 #EddyProc.C$sGLFluxPartition(controlGLPart.l=partGLControl(isBoundLowerNEEUncertainty=FALSE))	# day time partitioning -> Reco_DT, GPP_DT
   
-  
-  #KK note 10.28.2024: Error here, code is having trouble finding valid temp sensitivity -- even with Kyle's cleaning fix, doesn't work -- go back through code, re-check it all?
+
 ```
 
 #check out data

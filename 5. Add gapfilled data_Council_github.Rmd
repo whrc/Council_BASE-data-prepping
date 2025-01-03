@@ -13,16 +13,23 @@ rm(list = ls())
 
 library(data.table)
 library(ggplot2)
-setwd('C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/') #use this to set your directory
+setwd('C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/') #use this to set your directory - Git folder
+#setwd('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/') #use this to set your directory - Council Data doc folder 
 
 Sys.setenv(TZ='UTC')
 ```
 
 #read the ungapfilled data so it can be merged with the gapfilled data 
 ```{r}
-dat.h =fread("C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/data/council-Results_data_2017_2023.txt", header = T, nrows = 0) #header
+# dat.h =fread("C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/data/council-Results_data_2017_2023.txt", header = T, nrows = 0) #header
+# 
+# dat =fread("C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/data/council-Results_data_2017_2023.txt", header = F, skip = 2) #removes the row with the units
 
-dat =fread("C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/data/council-Results_data_2017_2023.txt", header = F, skip = 2) #removes the row with the units
+
+  
+dat.h =fread("C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/data/council-Results_data_2017_2023.txt", header = T, nrows = 0) #header
+
+dat =fread("C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council-Results_data_2017_2023.txt", header = F, skip = 2) #removes the row with the units
 
 names (dat) = names (dat.h) #binds header and df without units together 
 

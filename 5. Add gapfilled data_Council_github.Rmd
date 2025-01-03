@@ -13,28 +13,29 @@ rm(list = ls())
 
 library(data.table)
 library(ggplot2)
-setwd('C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/') #use this to set your directory - Git folder
+# setwd('C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/') #use this to set your directory - Git folder
 #setwd('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/') #use this to set your directory - Council Data doc folder 
 
 Sys.setenv(TZ='UTC')
 ```
 
-#read the ungapfilled data so it can be merged with the gapfilled data 
+#ignore this  
 ```{r}
-# dat.h =fread("C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/data/council-Results_data_2017_2023.txt", header = T, nrows = 0) #header
-# 
-# dat =fread("C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/data/council-Results_data_2017_2023.txt", header = F, skip = 2) #removes the row with the units
+#note to self: council results saved to my github folder, not my usual council folder*
+dat.h =fread("C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/data/council_2017_2023_gf.csv", header = T, nrows = 0) #header
 
+dat =fread("C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/data/council_2017_2023_gf.csv", header = F, skip = 2) #removes the row with the units
 
-  
-dat.h =fread("C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/data/council-Results_data_2017_2023.txt", header = T, nrows = 0) #header
-
-dat =fread("C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council-Results_data_2017_2023.txt", header = F, skip = 2) #removes the row with the units
-
-names (dat) = names (dat.h) #binds header and df without units together 
+#Note to self: working directory is back to usual Council data folder 
 
 #dat = fread('./council_2017_2023_gf.csv')
 
+```
+#Read in the un-gapfilled data 
+```{r}
+#note to self: council results saved to my github folder, not my usual council folder*
+
+dat =fread("C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_2017_2023_gf.csv") 
 ```
 
 
@@ -61,15 +62,15 @@ gf$ts = ts
 
 summary(gf$ts)
 
-hour = floor(x = dat$Hour)
-dif = dat$Hour - hour
-min = dif*60
-time = paste(hour,min,sep = ':')
-date = paste(dat$Year,dat$DoY,sep = '-')
-ts   = as.POSIXct(paste(date,time,sep = ' '),format = '%Y-%j %H:%M')
-dat$ts = ts
-
-summary(dat$ts)
+# hour = floor(x = dat$Hour)
+# dif = dat$Hour - hour
+# min = dif*60
+# time = paste(hour,min,sep = ':')
+# date = paste(dat$Year,dat$DoY,sep = '-')
+# ts   = as.POSIXct(paste(date,time,sep = ' '),format = '%Y-%j %H:%M')
+# dat$ts = ts
+# 
+# summary(dat$ts)
 
 ```
 
@@ -126,10 +127,12 @@ summary(dat$ts) #check out timestamp to make sure it looks correct
 ```{r}
 
 #save to git folder in docs 
-write.csv(x = dat,file = 'C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/data/council_gapfilled_clean_2017_2023.csv',quote = F,row.names = F)
+
+#".2" represents the adj SWC (tussock) re-run (though I think I already re-ran it with the SWC, so likely orig file is already this same file)
+write.csv(x = dat,file = 'C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/data/council_gapfilled_clean_2017_2023.2.csv',quote = F,row.names = F)
 
 #save to council data folder in docs 
-write.csv(x = dat,file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023.csv',quote = F,row.names = F)
+write.csv(x = dat,file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023.2.csv',quote = F,row.names = F)
 
 
 

@@ -1010,6 +1010,6 @@ cf2 <- cf2 %>%
 #Save the gapfilled data 
 ```{r,error=FALSE,warning=FALSE}
 #write.csv(x = cf,file = "./council_2017_2023_gf.csv",row.names = F) #_gf to indicate it's been gapfilled 
-write.csv(x= cf, file = "C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_2017_2023_gf.csv")
+write.csv(x= cf2, file = "C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_2017_2023_gf.csv")
 ```
 

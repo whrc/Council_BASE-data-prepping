@@ -136,6 +136,7 @@ ggplot(data = ncf)+
   geom_point(aes(date,swc*100,col='Measured'))+
   scale_y_continuous("SWC (%)")
 
+
 #validation dataset from only test data
 val = merge(test,ncf,by = "date",all.x = T)
 

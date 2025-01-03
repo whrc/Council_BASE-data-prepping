@@ -22,7 +22,7 @@ rm(list = ls())
 library(data.table)
 Sys.setenv(TZ='UTC')
 
-setwd('C:/Users/karndt.WHRC/Desktop/sites/council/data') #use this to set your directory
+setwd('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/') #use this to set your directory
 ```
 
 #Prep for Reddy for an initial gap filling

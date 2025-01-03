@@ -195,6 +195,7 @@ FilledEddyData.F <- EddyProc.C$sExportResults()
 #save as new file
 ```{r}
  #save as new file 
+#for me, this saves it to Github flux folder, not my council data folder 
 
 fWriteDataframeToFile(CombinedData.F, 'council-Results_data_2017_2023.txt', 'data')
 

@@ -13,7 +13,7 @@ rm(list = ls())
 
 library(data.table)
 library(ggplot2)
-setwd('C:/Users/karndt.WHRC/Desktop/sites/council/data') #use this to set your directory
+setwd('C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/') #use this to set your directory
 
 Sys.setenv(TZ='UTC')
 ```
@@ -118,6 +118,13 @@ summary(dat$ts) #check out timestamp to make sure it looks correct
 #save as new file 
 ```{r}
 
+#save to git folder in docs 
 write.csv(x = dat,file = 'C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/data/council_gapfilled_clean_2017_2023.csv',quote = F,row.names = F)
+
+#save to council data folder in docs 
+write.csv(x = dat,file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_gapfilled_clean_2017_2023.csv',quote = F,row.names = F)
+
+
+
 ```
 

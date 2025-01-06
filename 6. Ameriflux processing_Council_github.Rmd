@@ -125,6 +125,8 @@ PPFD_OUT = df$PPFD_OUT.c   # par in umol m-2 s-1
 SWC_1_1_1 = df$SWC_1_1_1.c
 SWC_2_1_1 = df$SWC_2_1_1.c
 SWC_3_1_1 = df$SWC_3_1_1.c
+SWC_4_1_1 = df$SWC_4_1_1.c #KK 1/6/2024 -> forgot to add this into latest, need to add in and redo steps**
+SWC_5_1_1 = df$SWC_5_1_1.c #KK 1/6/2024 -> forgot to add this into latest, need to add in and redo steps**
 
 
 #all soil temps deg C

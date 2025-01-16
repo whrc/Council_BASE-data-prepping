@@ -181,7 +181,7 @@ ggplot(data = all,aes(wd,WD))+
   geom_abline(slope = 1,intercept = 0,col='red',lty=2)
 ```
 
-#RH
+#RH - relative humidity 
 ```{r}
 #lowercase variables come from ERA; upper-case from our cleaned council met dataset
 #KK 10.28.2024: added the ".c" to use re-cleaned data from Dani 
@@ -237,7 +237,7 @@ ggplot(data = all)+
   geom_point(aes(date,tsoil.eramod,col='Lin. Reg.'))
 ```
 
-#Rg (SW-IN)
+#Rg (SW-IN)  - global radiation 
 ```{r}
 # "rad" is from ERA5; SW-IN is from our re-cleaned data, so changed to SW-IN.c to use the re-cleaned data 
 
@@ -261,7 +261,7 @@ ggplot(data = all,aes(rad,SW_IN.c))+theme_bw()+
   geom_abline(slope = 1,intercept = 0,col='red',lty=2)
 ```
 
-#ws
+#ws - wind speed 
 ```{r}
 #WS not re-cleaned, so keeping the original WS variable  
 ggplot(data = all)+
@@ -278,7 +278,7 @@ ggplot(data = all,aes(ws,WS))+theme_bw()+
   geom_smooth(method = 'lm')+
   geom_abline(slope = 1,intercept = 0,col='red',lty=2)
 ```
-#Le
+#Le - latent heat flux 
 ```{r}
 #changed to LE.c to use re-cleaned data 
 ggplot(data = all)+
@@ -295,7 +295,7 @@ ggplot(data = all,aes(le,LE.c))+theme_bw()+
   geom_smooth(method = 'lm')+
   geom_abline(slope = 1,intercept = 0,col='red',lty=2)
 ```
-#H
+#H - sensible heat flux 
 ```{r}
 #changed to H.c to use re-cleaned data 
 ggplot(data = all)+
@@ -323,7 +323,7 @@ df = df[!duplicated(df$ts),]
 ```{r}
 #Added ".c" to cleaned data 
 
-#calculate VPD from air t and RH in ERA5 df
+#calculate VPD (vapor pressure deficit) from air t and RH in ERA5 df
 svp = 610.7*10^((7.5*all$airt)/(237.3+all$airt))
 all$vpd.era = ((100 - all$rh)/100)*svp  
 

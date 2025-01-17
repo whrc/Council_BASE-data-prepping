@@ -333,16 +333,16 @@ US_NGC2.2 = data.frame(TIMESTAMP_START,TIMESTAMP_END, #adding ".2" to indicate u
 
 #merge into the site ID -- this is using the old data but for our new council site, we will have a new site ID assigned 
 ```{r}
-siteID = "US-NGC2.2" #adding the 2 to differentiate from US-NGC, as the site will get a new ID, TBD 
+siteID = "US-NGC2.2" #adding the 2 to differentiate from US-NGC, as the site will get a new ID, TBD, and ".2" to represent SWC3-tussock dataset
 resolution = 'HH'
-tsstart = US_NGC2$TIMESTAMP_START[1]
-tsend   = US_NGC2$TIMESTAMP_END[nrow(US_NGC2)]
+tsstart = US_NGC2.2$TIMESTAMP_START[1]
+tsend   = US_NGC2.2$TIMESTAMP_END[nrow(US_NGC2.2)]
 
 filename = paste(siteID,resolution,tsstart,tsend,sep = '_') #adds the beginning and end time of df to the file name 
 filename = paste("./",filename,".csv",sep = "")
 
 write.csv(x = US_NGC2.2, file = filename,row.names = F,na = "-9999",quote = F)
 
-#final doc name will look like this: US-NGC2_HH_201701010000_202309010000.csv --> saves to my council data folder 
+#final doc name will look like this: US-NGC2_HH_201701010000_202309010000.csv --> saves to my Github council folder 
 
 ```

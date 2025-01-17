@@ -32,7 +32,6 @@ library(openair)
 
 #read in cleaned and Ameriflux prepped half-hourly dataset
 ```{r}
-#updated version following adding wind direction to RF in Github folder 
 #orig dataset, before adj SWC and re-running through processing steps 
  # df2 = fread(input = "C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/US-NGC2_HH_201701010000_202309010000.csv", na.strings = "-9999")
 ##na.strings = c('-9999','NA','NaN','NAN','-7999')

@@ -28,7 +28,7 @@ setwd('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/') #use thi
 #Prep for Reddy for an initial gap filling
 #Load in gapfilled data from previous step 
 ```{r}
-dat = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_2017_2023_gf.csv')
+dat = fread('C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_2017_2023_gf_tuss.csv')
 ```
 
 #Create useable time variables 

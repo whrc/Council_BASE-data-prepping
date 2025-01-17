@@ -22,9 +22,9 @@ Sys.setenv(TZ='UTC')
 #ignore this  
 ```{r}
 #note to self: council results saved to my github folder, not my usual council folder*
-dat.h =fread("C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/data/council_2017_2023_gf.csv", header = T, nrows = 0) #header
+dat.h =fread("C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/data/council_2017_2023_gf_tuss.csv", header = T, nrows = 0) #header
 
-dat =fread("C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/data/council_2017_2023_gf.csv", header = F, skip = 2) #removes the row with the units
+dat =fread("C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/data/council_2017_2023_gf_tuss.csv", header = F, skip = 2) #removes the row with the units
 
 #Note to self: working directory is back to usual Council data folder 
 
@@ -35,7 +35,7 @@ dat =fread("C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/C
 ```{r}
 #note to self: council results saved to my github folder, not my usual council folder*
 
-dat =fread("C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_2017_2023_gf.csv") 
+dat =fread("C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_2017_2023_gf_tuss.csv") 
 ```
 
 
@@ -129,10 +129,10 @@ summary(dat$ts) #check out timestamp to make sure it looks correct
 #save to git folder in docs 
 
 #original dataset using SWC_1 --> we are using the updated version below
-#write.csv(x = dat,file = 'C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/data/council_gapfilled_clean_2017_2023.2.csv',quote = F,row.names = F)
+#write.csv(x = dat,file = 'C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/data/council_gapfilled_clean_2017_2023.csv',quote = F,row.names = F)
 
 #save to github folder
-#".2" represents the adj SWC_2 (tussock) re-run 
+#".2" represents the adj SWC_3 (tussock) re-run 
 write.csv(x = dat,file = 'C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/data/council_gapfilled_clean_2017_2023.2.csv',quote = F,row.names = F)
 
 #save to council data folder in docs 

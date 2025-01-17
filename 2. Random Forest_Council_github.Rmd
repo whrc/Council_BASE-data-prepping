@@ -35,7 +35,6 @@ cf = fread("C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/counci
 #subset out by which has complete air t data 
 cf = cf[complete.cases(cf$airt.eramod),]
 
-
 ```
 
 #Create subset of data to use for RF training -- use only ERA5 variables for training since RF needs a continuous dataset (no NAs)
@@ -70,20 +69,13 @@ head(ncf)
 #rename for easier names
 names(ncf) = c('date','nee',"fch4",'tair', 'wd', 'cardDir','rh','rg','ws','tsoil','swc','h','le')
 
-#make the ERA5 wd numeric 
-
-
-# #can't have NAs, so need to remove them or use the ERA5 data -- tried this, model still didn't want to run...
-# ncf$wd <- na.omit(ncf$wd)
-# ncf$cardDir <- na.omit(ncf$cardDir)
-
 #make card dir as factor - 8 levels 
 ncf$cardDir <- as.factor(ncf$cardDir)
 
 ```
+#SWC gapfilling through RF 
 
-
-#Calc VPD from air temp and RH
+####Calc VPD from air temp and RH
 ```{r}
 #calculate VPD from air t and RH
 svp = 610.7*10^((7.5*ncf$tair)/(237.3+ncf$tair))
@@ -93,6 +85,8 @@ ncf$vpd = ((100 - ncf$rh)/100)*svp
 #create training dataset and testing dataset 
 ```{r}
 #*KK edit 12/27/24 - changing to SWC3 to reflect tussock 
+
+orig = Sys.time() #starting timer 
 
 set.seed(123)#sets the start point of models, good for repeatability
 cc = ncf[complete.cases(ncf$swc),]#create a gap free data set of the target variable
@@ -107,8 +101,7 @@ hist(cc$swc)
 hist(train$swc)
 hist(test$swc)
 
-#run random forest to predict missing SWC values - leave out or include wd? included wd here* 
-
+#run random forest to predict missing SWC values 
 rf.swc = randomForest(formula = swc ~ tair + rh + rg + ws + wd + tsoil + vpd + le + h,data = train,ntree = 150)
 #tried various tree numbers, no sig improvement after 300....very minimal diff between 150 and 300, and 150 looks slightly better.
 
@@ -117,14 +110,7 @@ swc.rf = predict(object = rf.swc,newdata = ncf)
 ncf$swc.rf = swc.rf #add the variable to the main data frame
 
 
-#run random forest to predict missing SWC values - used wd and carDir --> very similar results to when just using wd 
-# rf.swc2 = randomForest(formula = swc ~ tair + rh + rg + ws + wd + cardDir + tsoil + vpd + le + h,data = train,ntree = 150)
-# #tried various tree numbers, no sig improvement after 300....very minimal diff between 150 and 300, and 150 looks slightly better.
-# 
-# #predict it on the full data set
-# swc.rf2 = predict(object = rf.swc2,newdata = ncf)
-# ncf$swc.rf2 = swc.rf2 #add the variable to the main data frame
-
+Sys.time() - orig #stop timer --> about  5 min
 ```
 
 
@@ -151,29 +137,11 @@ summary(lm(val$swc.x ~ val$swc.rf)) #R2 = 0.97, slope = 1.02
 #create final gap free soil moisture
 ncf$swc = ifelse(is.na(ncf$swc),ncf$swc.rf,ncf$swc)
 
-#results from using cardinal directions as well as wd in RF --> very similar results, using the version with just wd for simplicity 
-#time series plot of gap filled vs real
-# ggplot(data = ncf)+
-#   geom_point(aes(date,swc.rf2*100,col='RF'))+
-#   geom_point(aes(date,swc*100,col='Measured'))+
-#   scale_y_continuous("SWC (%)")
-# 
-# #validation dataset from only test data
-# val = merge(test,ncf,by = "date",all.x = T)
-# 
-# ggplot(data = val,aes(swc.rf2,swc.x))+theme_bw()+geom_abline(slope = 1,intercept = 0,col='red')+
-#   geom_point(alpha=0.1)+
-#   scale_x_continuous(limits = c(0,70),"RF SWC (%)")+
-#   scale_y_continuous(limits = c(0,70),"Measured SWC (%)")
-# 
-# #summary stats on gap filling
-# summary(lm(val$swc.x ~ val$swc.rf2)) #R2 = 0.945
+#Create an interaction term between swc & soil temp 
+ncf$TS_SWC_interact <- ncf$tsoil * ncf$swc
 
-#create final gap free soil moisture
-#ncf$swc = ifelse(is.na(ncf$swc),ncf$swc.rf,ncf$swc)
+
 ```
-
-
 #NEE *********************
 
 ####Look at range of data 
@@ -198,6 +166,7 @@ boruta = Boruta(nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h,data
 plot(boruta,las = 2)
 ```
 
+
 #Let's try to fill NEE with random forest
 
 ####Create training and testing dataset 
@@ -214,222 +183,33 @@ hist(test.nee$nee)
 
 #sum(is.na(cc$swc)) #make sure there are no NAs in dataset or RF model won't work 
 ```
+Find the optimum number of trees for the RF model using minimum out-of-bag error (OOB error)
+-optimal number of trees for nee = 850, but minimal improvement after 600/650
 
-#TO Do -- add in rf n=1000 data into merged dataset to plot and compare to tree = 150 -- re-run processing steps with new SWC -- re-run processing steps for just Methane based on pond margin, or just 2019 data?? 
+A higher %IncMSE value means that the variable is more important for the model. Removing this variable would result in a larger increase in the model's prediction error.
+A lower %IncMSE value means that the variable is less important. Removing this variable would result in a smaller increase in the model's prediction error.
 
+#Training RF; include: wd, SWC3 tussuck, swc*tsoil interaction
 
-#Find the optimum number of trees for the RF model using minimum out-of-bag error (OOB error)
-#Can't get this to work, look over it with Kyle? 
-
+####Training various versions of the model to determine best one, altering interaction effect, ntree #, and checking with lm agreement & RMSE 
 ```{r}
+orig = Sys.time() #starting timer to see how long this takes 
 
-library(randomForest)
-
-
-rf_model_test <- randomForest(nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h, 
-                              data = train.nee, 
-                              ntree = 100, 
-                              importance = TRUE)
-
-# Check the structure of err.rate
-str(rf_model_test$err.rate) #returns NULL, which means error rate is possibly not included or not in the model config *Ask Kyle about this 
-
-
-
-#Code if error rate worked (but does not, so see alt code below)
-# Define a range of ntree values
-ntree_values <- seq(100, 1000, by = 50)  # Adjust the range and step as needed
-oob_errors <- numeric(length(ntree_values))  # Initialize a vector for storing OOB errors
-
-# Loop through ntree values and extract the final OOB error  -- can't get this portion to work
-for (i in seq_along(ntree_values)) {
-  rf_model_ntree <- randomForest(nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h, 
-                           data = train.nee, 
-                           ntree = ntree_values[i], 
-                           importance = TRUE)
-  
-  # Extract the final OOB error (last row corresponds to the last tree)
-  oob_errors[i] <- rf_model_ntree$err.rate[nrow(rf_model_ntree$err.rate), "OOB"]
-}
-
-# Find the optimal number of trees
-optimal_ntree <- ntree_values[which.min(oob_errors)]
-
-# Plot the OOB errors
-plot(ntree_values, oob_errors, type = "b", pch = 19, col = "blue",
-     xlab = "Number of Trees (ntree)", ylab = "OOB Error",
-     main = "Optimal ntree for Random Forest")
-abline(v = optimal_ntree, col = "red", lty = 2)  # Add a vertical line for the optimal ntree
-
-# Print the optimal number of trees
-cat("Optimal number of trees:", optimal_ntree, "\n")
-
-
-
-#Alt code for calculating OOB error  ---> this was running for 24 hours and was still not complete, trying the alternate code in the chunk below to try and optimize 
-
-# Define a range of ntree values
-ntree_values <- seq(100, 1000, by = 50)
-oob_errors <- numeric(length(ntree_values))  # Initialize a vector for OOB errors
-
-# Loop through ntree values and calculate OOB error
-for (i in seq_along(ntree_values)) {
-  rf_model <- randomForest(nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h, 
-                           data = train.nee, 
-                           ntree = ntree_values[i], 
-                           importance = TRUE)
-  
-  # Predict OOB data
-  oob_pred <- predict(rf_model, train.nee, type = "response", predict.all = TRUE)
-  
-  # Calculate OOB error as RMSE
-  oob_error <- sqrt(mean((train.nee$nee - oob_pred$aggregate)^2, na.rm = TRUE))
-  oob_errors[i] <- oob_error
-}
-
-# Find the optimal number of trees
-optimal_ntree <- ntree_values[which.min(oob_errors)]
-
-# Plot the OOB errors
-plot(ntree_values, oob_errors, type = "b", pch = 19, col = "blue",
-     xlab = "Number of Trees (ntree)", ylab = "OOB RMSE",
-     main = "Optimal ntree for Random Forest")
-abline(v = optimal_ntree, col = "red", lty = 2)  # Add a vertical line for the optimal ntree
-
-# Print the optimal number of trees
-cat("Optimal number of trees:", optimal_ntree, "\n")
-
-
-
-```
-
-
-#Parallel progress for calculating OOB error based on number of RF trees 
-```{r}
-library(doSNOW)
-library(foreach)
-library(parallel)
-library(doParallel)
-
-# Define the number of trees and prepare progress bar
-ntree_values <- seq(100, 1000, by = 100) # Example range of trees
-pb <- txtProgressBar(min = 0, max = length(ntree_values), style = 3)
-
-# Initialize cluster and progress bar
-cl <- makeCluster(detectCores() - 1) # Use all but one core
-registerDoSNOW(cl)
-
-# Function to run Random Forest and track progress
-oob_errors <- foreach(ntree = ntree_values, .combine = c, .packages = "randomForest", .options.snow = list(progress = function(n) setTxtProgressBar(pb, n))) %dopar% {
-  model <- randomForest(nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h, 
-                        data = train.nee, 
-                        ntree = ntree, 
-                        importance = TRUE)
-  tail(model$err.rate[, 1], 1) # Get the final OOB error
-}
-
-# Close progress bar and cluster
-close(pb)
-stopCluster(cl)
-
-# Plot OOB errors vs. number of trees
-plot(ntree_values, oob_errors, type = "b", xlab = "Number of Trees", ylab = "OOB Error") #plot does not look correct
-
-
-#checking out the error 
-
-print(ntree_values) # correct 100 - 1000 by 100
-print(oob_errors) #returns "NULL"
-length(ntree_values) == length(oob_errors) # null, oob_errors doesn't seem to exist 
-
-#testing OOB error
-library(foreach)
-result <- foreach(i = 1:5, .combine = c) %dopar% {
-  i^2
-}
-print(result)  # Should return 1, 4, 9, 16, 25
-
-#checking parallel backend 
-oob_errors <- foreach(ntree = ntree_values, .combine = c, 
-                      .packages = "randomForest", 
-                      .options.snow = list(progress = function(n) setTxtProgressBar(pb, n))) %dopar% {
-  print(ntree)  # Check which ntree value is being processed
-  model <- randomForest(nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h, 
-                        data = train.nee, 
-                        ntree = ntree, 
-                        importance = TRUE)
-  tail(model$err.rate[, 1], 1)  # Return the final OOB error
-  
-}
-
-#oob_errors still returns NULL
-
-#testing to see if error rate is in the rf model 
-test_model <- randomForest(nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h, 
-                           data = train.nee, 
-                           ntree = 100, 
-                           importance = TRUE)
-print(test_model$err.rate)  # Check if OOB error rates are available  --> returns NULL, so definitely not working, might not be included in the model? 
-
-#double checking predictor variables have no NA's
-colSums(is.na(train.nee[, c("tair", "rh", "rg", "ws", "wd", "tsoil", "swc", "vpd", "le", "h")])) #--> no NAs or missing values 
-
-
-
-```
-#Sticking with the original 150 for now - will revisit after disc with Kyle 
-####1000 trees for RF -- have the original 150 trees in code chunks below...
-```{r}
-# Train the Random Forest model with a large number of trees
-rf_model_1000 <- randomForest(nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h, data = train.nee, ntree = 1000, importance = TRUE)
-
-pnee.1000 = predict(object = rf_model_1000,newdata = ncf)
-
-cf$rf_model_1000 = pnee.1000
+#original RF model, no wind 
+# rfnee = randomForest(formula = nee ~ tair + rh + rg + ws + tsoil + swc + vpd + le + h,data = train.nee,ntree = 150,importance=T)
+# 
+# pnee = predict(object = rfnee,newdata = ncf)
+# 
+# cf$rfnee = pnee
 
 # Extract variable importance
-importance_values_1000 <- importance(rf_model_1000, type = 1)  # type = 1 for %IncMSE
-
-# Print the importance values
-print(importance_values_1000)
-#Results:
-#         %IncMSE
-# tair   44.60310
-# rh     80.63140
-# rg     47.78442
-# ws    106.25952 --> 3
-# wd    124.84380 --> 2
-# tsoil  81.23716
-# swc   139.01015--> 1
-# vpd    53.10850
-# le     72.99186
-# h      85.80990
-
-
-# Plot the importance values
-varImpPlot(rf_model_1000, type = 1, main = "Variable Importance (%IncMSE)")
-
-  
-```
-
-#Training RF; *ended up using the model with "wd" - changed SWC to tussock location 
-```{r}
-
-#original, no wind 
-rfnee = randomForest(formula = nee ~ tair + rh + rg + ws + tsoil + swc + vpd + le + h,data = train.nee,ntree = 150,importance=T)
-
-pnee = predict(object = rfnee,newdata = ncf)
-
-cf$rfnee = pnee
-
-# Extract variable importance
-importance_values1 <- importance(rfnee, type = 1)  # type = 1 for %IncMSE
-
-# Print the importance values
-print(importance_values1)
-
-# Plot the importance values
-varImpPlot(rfnee, type = 1, main = "Variable Importance (%IncMSE)")
+# importance_values1 <- importance(rfnee, type = 1)  # type = 1 for %IncMSE
+# 
+# # Print the importance values
+# print(importance_values1)
+# 
+# # Plot the importance values
+# varImpPlot(rfnee, type = 1, main = "Variable Importance (%IncMSE)")
 #Results:
 #        %IncMSE
 # tair  16.62267
@@ -443,151 +223,252 @@ varImpPlot(rfnee, type = 1, main = "Variable Importance (%IncMSE)")
 # h     36.95337 --> 3
 
 
-#using just wd (no cardDir) ---- using this one **************
-rfnee.2 = randomForest(formula = nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h,data = train.nee,ntree = 150,importance=T)
+#Final model (1.16.2025) --> using wd (degrees) and swc*tsoil interaction effect 
+rfnee.2 = randomForest(formula = nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h + TS_SWC_interact, data = train.nee, ntree = 850, importance=T)
 
 pnee.2 = predict(object = rfnee.2,newdata = ncf)
 
 cf$rfnee.2 = pnee.2
 
-
-#trying with just cardinal directions (no wd)
-rfnee.3 = randomForest(formula = nee ~ tair + cardDir + rh + rg + ws + cardDir + tsoil + swc + vpd + le + h,data = train.nee,ntree = 150,importance=T)
-
-pnee.3 = predict(object = rfnee.3,newdata = ncf)
-
-cf$rfnee.3 = pnee.3
-```
-
-
-#Checking variable importance using IncMSE
-```{r}
-#Higher %IncMSE: A higher %IncMSE value means that the variable is more important for the model. Removing this variable would result in a larger increase in the model's prediction error.
-#Lower %IncMSE: A lower %IncMSE value means that the variable is less important. Removing this variable would result in a smaller increase in the model's prediction error.
-
-
-# Train the Random Forest model - same as rfnee.2 in code chunk above 
-rf_model_nee <- randomForest(nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h, data = train.nee, importance = TRUE, ntree = 150)
-
 # Extract variable importance
-importance_values <- importance(rf_model_nee, type = 1)  # type = 1 for %IncMSE
+importance_values <- importance(rfnee.2, type = 1)  # type = 1 for %IncMSE
 
 # Print the importance values
 print(importance_values)
 
 # Plot the importance values
-varImpPlot(rf_model_nee, type = 1, main = "Variable Importance (%IncMSE)")
+varImpPlot(rfnee.2, type = 1, main = "NEE: Variable Importance (%IncMSE)")
 
-#Most important variables for NEE are wd (49.81), swc (49.11), ws(41.35)
+#Results
+#                   %IncMSE
+# tair             37.09071
+# rh               75.07910
+# rg               42.21997
+# ws               83.30741
+# wd              109.71833
+# tsoil            55.62251
+# swc             101.45663
+# vpd              46.77654
+# le               64.10837
+# h                73.46502
+# TS_SWC_interact  54.25937
+
+#removing swc*tsoil interaction 
+rfnee.nointeract = randomForest(formula = nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h, data = train.nee, ntree = 850, importance=T)
+
+
+pnee.nointeract = predict(object = rfnee.nointeract, newdata = ncf)
+
+cf$rfnee.nointeract = pnee.nointeract
+
+# Extract variable importance
+importance_values_nointeract <- importance(rfnee.nointeract, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values_nointeract)
+
+# Plot the importance values
+varImpPlot(rfnee.nointeract, type = 1, main = "NEE: Variable Importance (%IncMSE), ntree = 850, no interact")
+#Results:
+#        %IncMSE
+# tair   43.68468
+# rh     81.55038
+# rg     42.04323
+# ws     92.62934
+# wd    123.02509
+# tsoil  70.79813
+# swc   125.02074
+# vpd    47.83887
+# le     58.24990
+# h      77.54589
+
+
+
+#ntree = 1000, wd (degrees), and swc*tsoil interaction effect 
+rfnee.1000interact = randomForest(formula = nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h + TS_SWC_interact, data = train.nee, ntree = 1000, importance=T)
+
+pnee.1000interact = predict(object = rfnee.1000interact,newdata = ncf)
+
+cf$rfnee.1000interact = pnee.1000interact
+
+# Extract variable importance
+importance_values_1000interact <- importance(rfnee.1000interact, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values_1000interact)
+
+# Plot the importance values
+varImpPlot(rfnee.1000interact, type = 1, main = "NEE: Variable Importance (%IncMSE)")
+#Results:
+#                   %IncMSE
+# tair             43.56984
+# rh               73.43686
+# rg               47.31644
+# ws               91.75861
+# wd              122.65821
+# tsoil            61.99925
+# swc             114.34163
+# vpd              51.96064
+# le               60.12734
+# h                79.40722
+# TS_SWC_interact  62.15551
+
+
+#ntree = 1000, wd (degrees), *NO* interaction effect 
+rfnee.1000 = randomForest(formula = nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h, data = train.nee, ntree = 1000, importance=T)
+
+pnee.1000 = predict(object = rfnee.1000,newdata = ncf)
+
+cf$rfnee.1000 = pnee.1000
+
+# Extract variable importance
+importance_values_1000 <- importance(rfnee.1000, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values_1000)
+
+# Plot the importance values
+varImpPlot(rfnee.1000, type = 1, main = "NEE: Variable Importance (%IncMSE)")
+#Results
+#        %IncMSE
+# tair   46.87582
+# rh     83.79680
+# rg     48.27433
+# ws     96.58794
+# wd    125.74901
+# tsoil  81.53861
+# swc   131.51913
+# vpd    53.56545
+# le     64.36027
+# h      82.82959
+
+
+
+Sys.time() - orig #closing timer --> ntree = 650 took 12 min // 850 trees took roughly 23 min --> then took 16 min --> ntree=1000 took 20 min 
 ```
-#RSME of RF NEE ntree 150 and ntree 1000
+#Importance plot figure to save 
 ```{r}
+library(dplyr)
+library(ggplot2)
+
+#Make varImport a new dataset 
+# Extract variable importance
+importance_values_nee <- importance(rfnee.2, type = 1)  # type = 1 for %IncMSE
+
+# Convert the importance values to a data frame
+NEEimportance_df <- as.data.frame(importance_values_nee)
+
+# Add the variable names (row names) as a column
+NEEimportance_df$Variable <- rownames(NEEimportance_df)
+
+# Rename columns for clarity
+colnames(NEEimportance_df) <- c("Importance", "Variable")
+
+
+# Step 1: Sort the dataframe by Importance (ascending order)
+NEEimportance_df <- NEEimportance_df %>%
+  arrange(Importance)
+
+# Step 2: Create the ggplot with the sorted data
+importance_plot_NEE <- ggplot(NEEimportance_df, aes(x = reorder(Variable, Importance), y = Importance)) +
+  # Add dotted lines aligned with variables
+  geom_vline(xintercept = 1:nrow(NEEimportance_df), linetype = "dotted", color = "grey70") +
+  # Points and other elements
+  geom_point(size = 4, color = "black", fill = "white", shape = 21) +
+  labs(title = "NEE: Variable Importance (%IncMSE)", x = "Variable", y = "%IncMSE") +
+  coord_flip() +
+   theme_bw() +
+  theme(
+    panel.grid.major = element_blank(),  # Remove all major grid lines
+    panel.grid.minor = element_blank(),  # Remove all minor grid lines
+    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 14, face = "bold"),
+    axis.text.y = element_text(size = 14, face = "bold"),
+    axis.title.x = element_text(size = 16, face = "bold"),
+    axis.title.y = element_text(size = 16, face = "bold"),
+    plot.title = element_text(size = 20, face = "bold")
+  )
+
+# Print the plot
+print(importance_plot_NEE)
+
+
+#Save image 
+ggsave(
+  filename = "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Importance_plot_IncMSE_NEE.png",  # File name and extension
+  plot = importance_plot_NEE,   # The plot to save (default is the last plot created)
+  width = 18,                 # Width in inches
+  height = 10,                # Height in inches
+  dpi = 600,                 # Resolution in dots per inch
+  units = "cm"               # Units for width and height (can be "in", "cm", or "mm")
+)
+
+#ggsave("my_plot.pdf", width = 8, height = 6, dpi = 300, units = "in")
+
+```
+
+
+#RSME assessment of the different versions of the RF model 
+```{r}
+#merge the predicted datasets with the orig to validate 
+test.data.nee = merge(test.nee,cf,by = 'date',all.x = T)
 
 #original, no wd, ntree = 150
 rmse_nee <- sqrt(mean((test.data.nee$FC.c - test.data.nee$rfnee)^2, na.rm = TRUE))
 print(paste("RMSE: ntree = 150 ", rmse_nee)) #RSME =  1.51710632421705"
 
-#with wd, ntree 150
-rmse_nee150 <- sqrt(mean((test.data.nee$FC.c - test.data.nee$rfnee.2)^2, na.rm = TRUE))
-print(paste("RMSE: ntree = 150 ", rmse_nee150)) #RSME 1.49099361362971
+#with wd, ntree 150, no interaction 
+rmse_nee150 <- sqrt(mean((test.data.nee$FC.c - test.data.nee$rfnee.150)^2, na.rm = TRUE))
+print(paste("RMSE: ntree = 150 ", rmse_nee150)) #RSME 1.49099361362971 --> better RMSE, but since it's much lower number of trees, could be an artifact of not generalizing well / capturing noise 
 
-#with wd, ntree 1000
-rmse_nee1000 <- sqrt(mean((test.data.nee$FC.c - test.data.nee$rf_model_1000)^2, na.rm = TRUE))
-print(paste("RMSE: ntree = 1000 ", rmse_nee1000)) #RSME 1.49090148870823" --> very slightly better fit 
+#with wd, ntree 1000, no interaction 
+rmse_nee1000 <- sqrt(mean((test.data.nee$FC.c - test.data.nee$rfnee.1000)^2, na.rm = TRUE))
+print(paste("RMSE: ntree = 1000 ", rmse_nee1000)) #RSME  1.5125100083716 
 
-#with Card Dir, ntree 150
-rmse_nee_CD <- sqrt(mean((test.data.nee$FC.c - test.data.nee$rfnee.3)^2, na.rm = TRUE))
-print(paste("RMSE: ntree = 150 ", rmse_nee_CD)) #RSME  1.49438824446229"
+#with wd, ntree 1000, WITH* swc*tair interaction 
+rmse_nee1000interact <- sqrt(mean((test.data.nee$FC.c - test.data.nee$rfnee.1000interact)^2, na.rm = TRUE))
+print(paste("RMSE: ntree = 1000 ", rmse_nee1000interact)) #RSME 1.50456892078326"--> very slightly better fit 
+
+#with wd, interaction, ntree = 850 --> **FINAL MODEL**
+rmse_nee_interact <- sqrt(mean((test.data.nee$FC.c - test.data.nee$rfnee.2)^2, na.rm = TRUE))
+print(paste("RMSE: ntree = 850, swc*tsoil interaction ", rmse_nee_interact)) #RSME   1.50520844797875  --> actually a bit worse, maybe remove interaction?
+
+#with wd, *NO interaction, ntree = 850
+rmse_nee_nointeract <- sqrt(mean((test.data.nee$FC.c - test.data.nee$rfnee.nointeract)^2, na.rm = TRUE))
+print(paste("RMSE: ntree = 850, no interaction ", rmse_nee_nointeract)) #RSME   1.51357213649105  --> worse, keep interaction 
 ```
 
 ####Time series plots
 ```{r,error=FALSE,warning=FALSE}
 #This overlays the random forest modeled data points with the real data points so you can observe model agreement 
-
-# #plot of certain timeframe - no wind 
-# ggplot(data = cf)+theme_bw()+
-#   geom_point(aes(date,rfnee,col='RF'),alpha=0.2)+
-#   geom_point(aes(date,FC.c,col='Real'),alpha=0.2)+
-#   scale_x_datetime(limits = as.POSIXct(c("2019-06-15","2019-06-30")))
-# #plot of all years 
-# ggplot(data = cf)+theme_bw()+
-#   geom_point(aes(date,rfnee,col='RF'),alpha=0.2)+
-#   geom_point(aes(date,FC.c,col='Real'),alpha=0.2)+
-#   geom_hline(yintercept = 0)
-
-
-#tree = 150; plot of certain timeframes using wd (degrees) -- used this version of the model 
+#ntree = 850; plot of final version of RF model rfnee.2
 ggplot(data = cf)+theme_bw()+
   geom_point(aes(date,rfnee.2,col='RF'),alpha=0.2)+
   geom_point(aes(date,FC.c,col='Real'),alpha=0.2)+
-  labs(title = "with WD (degrees), ntree=150")+
+  labs(title = "with WD (degrees), ntree=850")+
   scale_x_datetime(limits = as.POSIXct(c("2019-06-15","2019-06-30")))
-#plot of all years; tree = 150
+#plot of all years; tree = 850
 ggplot(data = cf)+theme_bw()+
   geom_point(aes(date,rfnee.2,col='RF'),alpha=0.2)+
   geom_point(aes(date,FC.c,col='Real'),alpha=0.2)+
   geom_hline(yintercept = 0)+
-    labs(title = "with WD (degrees), ntree=150")
+    labs(title = "with WD (degrees), ntree=850")
 
 
-#tree = 1000; plot of certain timeframes using wd (degrees) -- used this version of the model 
-ggplot(data = cf)+theme_bw()+
-  geom_point(aes(date,rf_model_1000,col='RF'),alpha=0.2)+
-  geom_point(aes(date,FC.c,col='Real'),alpha=0.2)+
-  labs(title = "with WD (degrees), ntree=1000")+
-  scale_x_datetime(limits = as.POSIXct(c("2019-06-15","2019-06-30")))
-#plot of all years; tree = 1000
-ggplot(data = cf)+theme_bw()+
-  geom_point(aes(date,rf_model_1000,col='RF'),alpha=0.2)+
-  geom_point(aes(date,FC.c,col='Real'),alpha=0.2)+
-  geom_hline(yintercept = 0)+
-    labs(title = "with WD (degrees), ntree = 1000")
+#ntree = 850 and ntree = 1000 look very similar*
 
-#ntree = 15- and ntree = 1000 look very similar*
-
-# #plot of certain timeframe - cardinal directions, no wd  
-# ggplot(data = cf)+theme_bw()+
-#   geom_point(aes(date,rfnee.3,col='RF'),alpha=0.2)+
-#   geom_point(aes(date,FC.c,col='Real'),alpha=0.2)+
-#   labs(title = "Cardinal Direction (no wd)")+
-#   scale_x_datetime(limits = as.POSIXct(c("2019-06-15","2019-06-30")))
-# #plot of all years 
-# ggplot(data = cf)+theme_bw()+
-#   geom_point(aes(date,rfnee.3,col='RF'),alpha=0.2)+
-#   geom_point(aes(date,FC.c,col='Real'),alpha=0.2)+
-#   geom_hline(yintercept = 0)+
-#   labs(title = "Cardinal Direction (no wd)")
 
 #Results very similar, also seems to be predicting slightly lower/more conservative nee compared to site data 
 ```
 
 ####Validation - looking at agreement between modeled data and real data 
 ```{r,error=FALSE,warning=FALSE}
-#merge the predicted datasets with the orig to validate 
+#merge the predicted datasets with the orig to validate, if you haven't already for the RMSE comparisons
 test.data.nee = merge(test.nee,cf,by = 'date',all.x = T)
 
 #changed to FC.c to use re-cleaned variable 
 
-#original model, no wind direction 
-summary(lm(test.data.nee$FC.c ~ test.data.nee$rfnee)) #R2 = 0.63, slope = 1.01
-
-# councilnee = ggplot(data = test.data.nee,aes(rfnee,FC.c))+theme_bw()+
-#   geom_hline(yintercept = 0,lty=2)+
-#   geom_vline(xintercept = 0,lty=2)+
-#   geom_point(alpha=0.2)+
-#   scale_fill_viridis_c()+
-#   geom_abline(slope = 1,intercept = 0,col='red',lty=1)+
-#   scale_x_continuous(limits = c(-20,20),expression('Random Forest NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
-#   scale_y_continuous(limits = c(-20,20),expression('Eddy Covariance NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
-#   annotate(geom = 'text',x = 6, y = -8,label=expression(R^2~"= 0.64"),size = 3)+
-#   annotate(geom = 'text',x = 6,y = -10,label=expression(Slope~"= 1.02"),size = 3)+
-#   theme(text = element_text(size = 8)) +
-#   labs(title = "Orig - no wind")
-# 
-# councilnee 
-
-#Added wd (degrees) - RF ntree = 150
-summary(lm(test.data.nee$FC.c ~ test.data.nee$rfnee.2)) #R2 = 0.646, slope = 1.02; p<0.001
+#Added wd (degrees) - RF ntree = 850, with interaction *FINAL MODEL********
+summary(lm(test.data.nee$FC.c ~ test.data.nee$rfnee.2)) #R2 = 0.651; slope = 1.03; p<0.001
 
 councilnee2 = ggplot(data = test.data.nee,aes(rfnee.2,FC.c))+theme_bw()+
   geom_hline(yintercept = 0,lty=2)+
@@ -598,16 +479,55 @@ councilnee2 = ggplot(data = test.data.nee,aes(rfnee.2,FC.c))+theme_bw()+
   scale_x_continuous(limits = c(-20,20),expression('Random Forest NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
   scale_y_continuous(limits = c(-20,20),expression('Eddy Covariance NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
   annotate(geom = 'text',x = 6, y = -8,label=expression(R^2~"= 0.65"),size = 3)+
-  annotate(geom = 'text',x = 6,y = -10,label=expression(Slope~"= 1.02"),size = 3)+
+  annotate(geom = 'text',x = 6,y = -10,label=expression(Slope~"= 1.03"),size = 3)+
   theme(text = element_text(size = 8)) +
-  labs(title = "with WD (degrees), ntree = 150")
+  labs(title = "with WD (degrees), ntree = 850, swc*tsoil interaction")
 
 councilnee2 
 
-#Added wd (degrees) - RF ntree = 1000
-summary(lm(test.data.nee$FC.c ~ test.data.nee$rf_model_1000)) #R2 = 0.648, slope = 1.02
 
-councilnee3 = ggplot(data = test.data.nee,aes(rf_model_1000,FC.c))+theme_bw()+
+#with wd (degrees) - RF ntree = 850, *NO interaction 
+summary(lm(test.data.nee$FC.c ~ test.data.nee$rfnee.nointeract)) #R2 = 0.647; slope = 1.03; p<0.001
+
+councilnee_nointeract = ggplot(data = test.data.nee,aes(rfnee.nointeract,FC.c))+theme_bw()+
+  geom_hline(yintercept = 0,lty=2)+
+  geom_vline(xintercept = 0,lty=2)+
+  geom_point(alpha=0.2)+
+  scale_fill_viridis_c()+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=1)+
+  scale_x_continuous(limits = c(-20,20),expression('Random Forest NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
+  scale_y_continuous(limits = c(-20,20),expression('Eddy Covariance NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
+  annotate(geom = 'text',x = 6, y = -8,label=expression(R^2~"= 0.65"),size = 3)+
+  annotate(geom = 'text',x = 6,y = -10,label=expression(Slope~"= 1.03"),size = 3)+
+  theme(text = element_text(size = 8)) +
+  labs(title = "with WD (degrees), ntree = 150, no interaction")
+
+councilnee_nointeract  
+
+
+
+#Added wd (degrees) - RF ntree = 1000, NO swc*tsoil interaction 
+summary(lm(test.data.nee$FC.c ~ test.data.nee$rfnee.1000)) #R2 = 0.647, slope = 1.03
+
+councilnee_1000nointeract = ggplot(data = test.data.nee,aes(rfnee.1000,FC.c))+theme_bw()+
+  geom_hline(yintercept = 0,lty=2)+
+  geom_vline(xintercept = 0,lty=2)+
+  geom_point(alpha=0.2)+
+  scale_fill_viridis_c()+
+  geom_abline(slope = 1,intercept = 0,col='red',lty=1)+
+  scale_x_continuous(limits = c(-20,20),expression('Random Forest NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
+  scale_y_continuous(limits = c(-20,20),expression('Eddy Covariance NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
+  annotate(geom = 'text',x = 6, y = -8,label=expression(R^2~"= 0.65"),size = 3)+
+  annotate(geom = 'text',x = 6,y = -10,label=expression(Slope~"= 1.03"),size = 3)+
+  theme(text = element_text(size = 8)) +
+  labs(title = "with WD (degrees), ntree = 1000, no interaction")
+
+councilnee_1000nointeract
+
+#Added wd (degrees) - RF ntree = 1000, WITH* swc*tsoil interaction 
+summary(lm(test.data.nee$FC.c ~ test.data.nee$rfnee.1000interact)) #R2 = 0.6515, slope = 1.02
+
+councilnee_1000interact = ggplot(data = test.data.nee,aes(rfnee.1000interact,FC.c))+theme_bw()+
   geom_hline(yintercept = 0,lty=2)+
   geom_vline(xintercept = 0,lty=2)+
   geom_point(alpha=0.2)+
@@ -618,32 +538,12 @@ councilnee3 = ggplot(data = test.data.nee,aes(rf_model_1000,FC.c))+theme_bw()+
   annotate(geom = 'text',x = 6, y = -8,label=expression(R^2~"= 0.65"),size = 3)+
   annotate(geom = 'text',x = 6,y = -10,label=expression(Slope~"= 1.02"),size = 3)+
   theme(text = element_text(size = 8)) +
-  labs(title = "with WD (degrees), ntree = 1000")
+  labs(title = "with WD (degrees), ntree = 1000, swc*tsoil interaction")
 
-councilnee3 
+councilnee_1000interact
 
-#NOTE: ntree = 150 and ntree = 1000 appear essentially the same 
+#NOTE: ntree = 850 and ntree = 1000 appear essentially the same 
 
-
-
-#used cardinal direction only 
-
-summary(lm(test.data.nee$FC.c ~ test.data.nee$rfnee.3)) #R2 = 0.646, slope = 1.02
-# 
-# councilnee3 = ggplot(data = test.data.nee,aes(rfnee.3,FC.c))+theme_bw()+
-#   geom_hline(yintercept = 0,lty=2)+
-#   geom_vline(xintercept = 0,lty=2)+
-#   geom_point(alpha=0.2)+
-#   scale_fill_viridis_c()+
-#   geom_abline(slope = 1,intercept = 0,col='red',lty=1)+
-#   scale_x_continuous(limits = c(-20,20),expression('Random Forest NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
-#   scale_y_continuous(limits = c(-20,20),expression('Eddy Covariance NEE ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
-#   annotate(geom = 'text',x = 6, y = -8,label=expression(R^2~"= 0.65"),size = 3)+
-#   annotate(geom = 'text',x = 6,y = -10,label=expression(Slope~"= 1.03"),size = 3)+
-#   theme(text = element_text(size = 8))+
-#   labs(title = "with wind cardinal direction")
-# 
-# councilnee3 
 ```
 
 #Methane 
@@ -658,11 +558,7 @@ boruta = Boruta(fch4 ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h,dat
 boruta$finalDecision #indicates all above are confirmed important variables via a list 
 plot(boruta,las = 2) #plots the variables; green = important, yellow = tentative, red = not important 
 
- 
 
-#added wd - cardinal direction
-# boruta2 = Boruta(fch4 ~ tair + rh + rg + ws + cardDir + tsoil + swc + vpd + le + h,data = cc,doTrace = 2,maxRuns = 100)
-# plot(boruta2,las = 2)
 ```
 
 
@@ -673,7 +569,6 @@ plot(boruta,las = 2) #plots the variables; green = important, yellow = tentative
 #looking at range of data 
 ggplot(data = cc, aes(x=date, y = fch4)) + geom_point()
 
-#KK edit 11.12.2024 - adding trees to see if the model can constrain winter CH4 better
 
 #use 80% of data set as training set and 20% as test set, expanded to try to represent the larger points better
 #cc = subset(cc,cc$fch4 < 50) #50 cuts off what looks like real data for one of the years...adj to perhaps 60 
@@ -693,54 +588,10 @@ summary(test.ch4$fch4)
 
 
 ```
-#### RF model for CH4 
+####RF model for CH4 --> ntree = 150, with wd, just to see 
+
 ```{r}
-#no wind direction 
-rfch4 = randomForest(formula = fch4 ~ tair + rh + rg + ws + tsoil + vpd + swc + h + le,data = train.ch4,ntree = 150)
-
-pch4 = predict(object = rfch4,newdata = ncf)
-
-cf$rfch4 = pch4
-
-#added wd (degrees) -- used this version of the model*********** ntree = 150 
-rfch4.2 = randomForest(formula = fch4 ~ tair + rh + rg + ws + wd + tsoil + vpd + swc + h + le,data = train.ch4,ntree = 150)
-
-pch4.2 = predict(object = rfch4.2,newdata = ncf)
-
-cf$rfch4.2 = pch4.2
-
-#added wd (degrees) -- trying with ntree = 1000
-rfch4.1000 = randomForest(formula = fch4 ~ tair + rh + rg + ws + wd + tsoil + vpd + swc + h + le,data = train.ch4,ntree = 1000)
-
-pch4.1000 = predict(object = rfch4.1000,newdata = ncf)
-
-cf$rfch4.1000 = pch4.1000
-
-#added cardinal direction (no wd) 
-# rfch4.3 = randomForest(formula = fch4 ~ tair + rh + rg + ws + cardDir  + tsoil + vpd + swc + h + le,data = train.ch4,ntree = 150)
-# 
-# 
-# pch4.3 = predict(object = rfch4.3,newdata = ncf)
-# 
-# cf$rfch4.3 = pch4.3
-
-#added cardinal direction and wd 
-# rfch4.4 = randomForest(formula = fch4 ~ tair + rh + rg + ws + wd + cardDir + tsoil + vpd + swc + h + le,data = train.ch4,ntree = 150)
-# 
-# 
-# pch4.4 = predict(object = rfch4.4,newdata = ncf)
-# 
-# cf$rfch4.4 = pch4.4
-```
-
-#IncMSE for CH4 variable importance 
-```{r}
-#Higher %IncMSE: A higher %IncMSE value means that the variable is more important for the model. Removing this variable would result in a larger increase in the model's prediction error.
-#Lower %IncMSE: A lower %IncMSE value means that the variable is less important. Removing this variable would result in a smaller increase in the model's prediction error.
-
-#Re-running the RF models rom above here as well since it seems the importance_values don't calc properly unless its done directly following the model run
-
-# Train the Random Forest model - same as rfch4.2 model above 
+# Train the Random Forest model - no interaction 
 rf_model_CH4 = randomForest(formula = fch4 ~ tair + rh + rg + ws + wd + tsoil + vpd + swc + h + le, data = train.ch4,importance = TRUE, ntree = 150)
 # Extract variable importance
 importance_values <- importance(rf_model_CH4, type = 1)  # type = 1 for %IncMSE
@@ -749,7 +600,7 @@ importance_values <- importance(rf_model_CH4, type = 1)  # type = 1 for %IncMSE
 print(importance_values)
 
 # Plot the importance values
-varImpPlot(rf_model_CH4, type = 1, main = "FCH4: Variable Importance (%IncMSE), ntree = 150")
+varImpPlot(rf_model_CH4, type = 1, main = "FCH4: Variable Importance (%IncMSE), ntree = 150, no interaction")
 #Results:
 #        %IncMSE
 # tair  28.16018
@@ -763,41 +614,179 @@ varImpPlot(rf_model_CH4, type = 1, main = "FCH4: Variable Importance (%IncMSE), 
 # h     31.45271
 # le    31.76639
 
-
-#Now incMSE for ntree = 1000
-
-# Train the Random Forest model - same as rfch4.1000 model above 
-rf_model_CH4_1000 = randomForest(formula = fch4 ~ tair + rh + rg + ws + wd + tsoil + vpd + swc + h + le, data = train.ch4,importance = TRUE, ntree = 1000)
-# Extract variable importance
-importance_values2 <- importance(rf_model_CH4_1000, type = 1)  # type = 1 for %IncMSE
-
-# Print the importance values
-print(importance_values2)
-
-# Plot the importance values
-varImpPlot(rf_model_CH4_1000, type = 1, main = "FCH4: Variable Importance (%IncMSE), ntree = 1000")
-#Results:
-#         %IncMSE
-# tair   71.23076
-# rh     99.79669
-# rg     62.36291
-# ws    127.36021
-# wd    150.88643
-# tsoil 103.55460
-# vpd    62.92133
-# swc   183.88281
-# h      81.56650
-# le     73.25064
 ```
 
-#Validation - looking at agreement between modeled data and real data 
-## Methane - no wind direction, RF tree = 150 
-```{r,error=FALSE,warning=FALSE}
-#changed to FCH4.c to use the re-cleaned data - orig model, no wind direction, ntree = 150 
 
+
+#### RF model for CH4 --> per exploratory modeling in a different script, found optimum number of trees for CH4 was 950 per OOB error rate and improved from adding swc*tsoil interaction 
+```{r}
+orig = Sys.time() #set timer
+
+#ntree = 950, added wd (degrees) & swc*tsoil interaction -- used this version of the model***********  
+rfch4.2 = randomForest(formula = fch4 ~ tair + rh + rg + ws + wd + tsoil + vpd + swc + h + le + TS_SWC_interact, data = train.ch4, ntree = 950, importance = TRUE)
+
+pch4.2 = predict(object = rfch4.2, newdata = ncf)
+
+cf$rfch4.2 = pch4.2
+
+# Extract variable importance
+importance_values_ch4 <- importance(rfch4.2, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values_ch4)
+
+# Plot the importance values
+varImpPlot(rfch4.2, type = 1, main = "FCH4: Variable Importance (%IncMSE), ntree = 950")
+
+#Results
+#                   %IncMSE
+# tair             66.86343
+# rh               97.37551
+# rg               62.44024
+# ws              139.45953
+# wd              162.68689
+# tsoil            84.69990
+# vpd              66.22953
+# swc             141.36516
+# h                90.81950
+# le               82.76800
+# TS_SWC_interact  73.05598
+
+#ntree = 1000, added wd (degrees) & swc*tsoil interaction -- used this version of the model***********  
+rfch4.1000 = randomForest(formula = fch4 ~ tair + rh + rg + ws + wd + tsoil + vpd + swc + h + le + TS_SWC_interact, data = train.ch4, ntree = 1000, importance = TRUE)
+
+pch4.1000 = predict(object = rfch4.1000, newdata = ncf)
+
+cf$rfch4.1000 = pch4.1000
+
+# Extract variable importance
+importance_values_ch4.1000 <- importance(rfch4.1000, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values_ch4.1000)
+
+# Plot the importance values
+varImpPlot(rfch4.1000, type = 1, main = "FCH4: Variable Importance (%IncMSE), ntree = 1000")
+#Results
+#                   %IncMSE
+# tair             68.87706
+# rh              100.40642
+# rg               64.18042
+# ws              143.98849
+# wd              165.49987
+# tsoil            86.94837
+# vpd              67.81461
+# swc             145.68184
+# h                93.27058
+# le               84.19241
+# TS_SWC_interact  74.92690
+
+
+#ntree = 1000, added wd (degrees), *NO* interaction  
+rfch4.1000.nointeract = randomForest(formula = fch4 ~ tair + rh + rg + ws + wd + tsoil + vpd + swc + h + le, data = train.ch4, ntree = 1000, importance = TRUE)
+
+pch4.1000.nointeract = predict(object = rfch4.1000.nointeract, newdata = ncf)
+
+cf$rfch4.1000.nointeract = pch4.1000.nointeract
+
+# Extract variable importance
+importance_values_ch4.1000.nointeract <- importance(rfch4.1000.nointeract, type = 1)  # type = 1 for %IncMSE
+
+# Print the importance values
+print(importance_values_ch4.1000.nointeract)
+
+# Plot the importance values
+varImpPlot(rfch4.1000.nointeract, type = 1, main = "FCH4: Variable Importance (%IncMSE), ntree = 1000")
+#Results
+#        %IncMSE
+# tair   78.49971
+# rh    106.15139
+# rg     66.63705
+# ws    135.24316
+# wd    167.94026
+# tsoil 109.61671
+# vpd    67.40325
+# swc   189.68935
+# h      95.00363
+# le     83.87560
+
+
+Sys.time() - orig #stop timer --> about 7 min???; 1000 = 10 min; very quick
+```
+#Importance plot figure to save 
+```{r}
+library(dplyr)
+library(ggplot2)
+
+#Make varImport a new dataset 
+# Extract variable importance
+importance_values_ch4 <- importance(rfch4.2, type = 1)  # type = 1 for %IncMSE
+
+# Convert the importance values to a data frame
+CH4importance_df <- as.data.frame(importance_values_ch4)
+
+# Add the variable names (row names) as a column
+CH4importance_df$Variable <- rownames(CH4importance_df)
+
+# Rename columns for clarity
+colnames(CH4importance_df) <- c("Importance", "Variable")
+
+# Step 1: Sort the dataframe by Importance (ascending order)
+CH4importance_df <- CH4importance_df %>%
+  arrange(Importance)
+
+# Step 2: Create the ggplot with the sorted data
+importance_plot_FCH4 <- ggplot(CH4importance_df, aes(x = reorder(Variable, Importance), y = Importance)) +
+  # Add dotted lines aligned with variables
+  geom_vline(xintercept = 1:nrow(CH4importance_df), linetype = "dotted", color = "grey70") +
+  # Points and other elements
+  geom_point(size = 4, color = "black", fill = "white", shape = 21) +
+  labs(title = "CH4: Variable Importance (%IncMSE)", x = "Variable", y = "%IncMSE") +
+  coord_flip() +
+  # scale_y_continuous(breaks = seq(60, 160, by = 10)) +  # Custom breaks at every 10 units
+  theme_bw() +
+  theme(
+    panel.grid.major = element_blank(),  # Remove all major grid lines
+    panel.grid.minor = element_blank(),  # Remove all minor grid lines
+    axis.text.x = element_text(angle = 0, hjust = 0.5, size = 14, face = "bold"),
+    axis.text.y = element_text(size = 14, face = "bold"),
+    axis.title.x = element_text(size = 16, face = "bold"),
+    axis.title.y = element_text(size = 16, face = "bold"),
+    plot.title = element_text(size = 20, face = "bold")
+  )
+
+# Print the plot
+print(importance_plot_FCH4)
+
+
+#Save image 
+ggsave(
+  filename = "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Importance_plot_IncMSE_CH4.png",  # File name and extension
+  plot = importance_plot_NEE,   # The plot to save (default is the last plot created)
+  width = 18,                 # Width in inches
+  height = 10,                # Height in inches
+  dpi = 600,                 # Resolution in dots per inch
+  units = "cm"               # Units for width and height (can be "in", "cm", or "mm")
+)
+
+#ggsave("my_plot.pdf", width = 8, height = 6, dpi = 300, units = "in")
+
+```
+
+
+#Validation - looking at agreement between modeled data and real data 
+
+```{r,error=FALSE,warning=FALSE}
+#changed to FCH4.c to use the re-cleaned data 
+
+#merge datasets if to add the predicted methane to cf dataset for validation 
 test.data.ch4 = merge(test.ch4,cf,by = 'date',all.x = T)
 
-councilch4 = ggplot(data = test.data.ch4,aes(rfch4,FCH4.c))+theme_bw()+
+#with wd, with swc*tsoil interaction, ntree = 950
+summary(lm(test.data.ch4$FCH4.c ~ test.data.ch4$rfch4.2)) #R2 = 0.483; slope = 1.017 
+
+
+councilch4 = ggplot(data = test.data.ch4,aes(rfch4.2,FCH4.c))+theme_bw()+
   geom_hline(yintercept = 0,lty=2)+
   geom_vline(xintercept = 0,lty=2)+
   geom_point(alpha=0.2)+
@@ -805,108 +794,75 @@ councilch4 = ggplot(data = test.data.ch4,aes(rfch4,FCH4.c))+theme_bw()+
   geom_abline(slope = 1,intercept = 0,col='red',lty=1)+
   scale_x_continuous(limits = c(-50,150),expression('Random Forest '*CH[4]~flux~" ("*mu*mol~CH[4]~m^-2~s^-1*')'))+
   scale_y_continuous(limits = c(-50,150),expression('Eddy Covariance '*CH[4]~flux~" ("*mu*mol~CH[4]~m^-2~s^-1*')'))+
-  annotate(geom = 'text',x = 100,y = 20,label = expression(R^2~"= 0.44"),size = 3)+
-  annotate(geom= 'text',x = 100,y = 10,label = expression(Slope~"= 1.02"),size = 3)+
+  annotate(geom = 'text',x = 100,y = 20,label = expression(R^2~"= 0.48"),size = 3)+
+  annotate(geom= 'text',x = 100,y = 10,label = expression(Slope~"= 1.017"),size = 3)+
   theme(text = element_text(size = 8))
 
 councilch4
 
-summary(lm(test.data.ch4$FCH4.c ~ test.data.ch4$rfch4)) #R2 = 0.51, slope = 1.04, p<0.001
-```
+#with wd, with swc*tsoil interaction, ntree = 1000
+summary(lm(test.data.ch4$FCH4.c ~ test.data.ch4$rfch4.1000)) #R2 = 0.483; slope = 1.017 --> same 
 
-##Methane - adding wind direction, RF tree = 150 & 1000 
-
-```{r,error=FALSE,warning=FALSE}
-
-#added wd (degrees) -- ntree = 150
-#test.data.ch4 = merge(test.ch4,cf,by = 'date',all.x = T) #don't need this here if merged in code chunk above 
-summary(lm(test.data.ch4$FCH4.c ~ test.data.ch4$rfch4.2)) #R2 = 0.548, slope = 1.0457; Residual standard error: 5.878 on 4441 degrees of freedom
-
-councilch4.2= ggplot(data = test.data.ch4,aes(rfch4.2,FCH4.c))+theme_bw()+
+councilch4.1000 = ggplot(data = test.data.ch4,aes(rfch4.1000,FCH4.c))+theme_bw()+
   geom_hline(yintercept = 0,lty=2)+
   geom_vline(xintercept = 0,lty=2)+
   geom_point(alpha=0.2)+
   scale_fill_viridis_c()+
   geom_abline(slope = 1,intercept = 0,col='red',lty=1)+
-  scale_x_continuous(limits = c(-50,150),expression('Random Forest FCH4 - with WD ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
-  scale_y_continuous(limits = c(-50,150),expression('Eddy Covariance FCH4 ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
-  annotate(geom = 'text',x = 50, y = -8,label=expression(R^2~"= 0.55"),size = 3)+
-  annotate(geom = 'text',x = 50,y = -17,label=expression(Slope~"= 1.04"),size = 3)+
-  theme(text = element_text(size = 8)) +
-   labs(title = "CH4 with WD (degrees), ntree = 150")
+  scale_x_continuous(limits = c(-50,150),expression('Random Forest '*CH[4]~flux~" ("*mu*mol~CH[4]~m^-2~s^-1*')'))+
+  scale_y_continuous(limits = c(-50,150),expression('Eddy Covariance '*CH[4]~flux~" ("*mu*mol~CH[4]~m^-2~s^-1*')'))+
+  annotate(geom = 'text',x = 100,y = 20,label = expression(R^2~"= 0.48"),size = 3)+
+  annotate(geom= 'text',x = 100,y = 10,label = expression(Slope~"= 1.017"),size = 3)+
+  theme(text = element_text(size = 8))
 
-councilch4.2 
+councilch4.1000
 
-#using wd and ntree = 1000
-summary(lm(test.data.ch4$FCH4.c ~ test.data.ch4$rfch4.1000)) #R2 = 0.5497, slope = 1.050; Residual standard error: 5.868 on 4441 degrees of freedom
 
-councilch4.1000= ggplot(data = test.data.ch4,aes(rfch4.2,FCH4.c))+theme_bw()+
+#with wd, *NO* interaction, ntree = 1000
+summary(lm(test.data.ch4$FCH4.c ~ test.data.ch4$rfch4.1000.nointeract)) #R2 = 0.482; slope = 1.02 
+
+councilch4.1000.nointeract = ggplot(data = test.data.ch4,aes(rfch4.1000.nointeract,FCH4.c))+theme_bw()+
   geom_hline(yintercept = 0,lty=2)+
   geom_vline(xintercept = 0,lty=2)+
   geom_point(alpha=0.2)+
   scale_fill_viridis_c()+
   geom_abline(slope = 1,intercept = 0,col='red',lty=1)+
-  scale_x_continuous(limits = c(-50,150),expression('Random Forest FCH4 - with WD ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
-  scale_y_continuous(limits = c(-50,150),expression('Eddy Covariance FCH4 ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
-  annotate(geom = 'text',x = 50, y = -8,label=expression(R^2~"= 0.55"),size = 3)+
-  annotate(geom = 'text',x = 50,y = -17,label=expression(Slope~"= 1.05"),size = 3)+
-  theme(text = element_text(size = 8))+
-   labs(title = "CH4 with WD (degrees), ntree = 1000")
+  scale_x_continuous(limits = c(-50,150),expression('Random Forest '*CH[4]~flux~" ("*mu*mol~CH[4]~m^-2~s^-1*')'))+
+  scale_y_continuous(limits = c(-50,150),expression('Eddy Covariance '*CH[4]~flux~" ("*mu*mol~CH[4]~m^-2~s^-1*')'))+
+  annotate(geom = 'text',x = 100,y = 20,label = expression(R^2~"= 0.482"),size = 3)+
+  annotate(geom= 'text',x = 100,y = 10,label = expression(Slope~"= 1.017"),size = 3)+
+  theme(text = element_text(size = 8))
 
-councilch4.1000 
-
-#NOTE: ntree = 150 and ntree = 1000 appear essentially the same*
-
-#used cardinal direction 
-# summary(lm(test.data.ch4$FCH4.c ~ test.data.ch4$rfch4.3)) #R2 =0.46, slope = 0.99
-# 
-# councilch4= ggplot(data = test.data.ch4,aes(rfch4.3,FCH4.c))+theme_bw()+
-#   geom_hline(yintercept = 0,lty=2)+
-#   geom_vline(xintercept = 0,lty=2)+
-#   geom_point(alpha=0.2)+
-#   scale_fill_viridis_c()+
-#   geom_abline(slope = 1,intercept = 0,col='red',lty=1)+
-#   scale_x_continuous(limits = c(-50,150),expression('Random Forest FCH4 with card Dir ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
-#   scale_y_continuous(limits = c(-50,150),expression('Eddy Covariance FCH4 ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
-#   annotate(geom = 'text',x = 6, y = -8,label=expression(R^2~"= 0.46"),size = 3)+
-#   annotate(geom = 'text',x = 6,y = -10,label=expression(Slope~"= 0.99"),size = 3)+
-#   theme(text = element_text(size = 8))
-# 
-# councilch4.3 
-
-#used cardinal direction and wd 
-# summary(lm(test.data.ch4$FCH4.c ~ test.data.ch4$rfch4.4)) #R2 =0.46, slope = 1.00
-# 
-# councilch4= ggplot(data = test.data.ch4,aes(rfch42,FCH4.c))+theme_bw()+
-#   geom_hline(yintercept = 0,lty=2)+
-#   geom_vline(xintercept = 0,lty=2)+
-#   geom_point(alpha=0.2)+
-#   scale_fill_viridis_c()+
-#   geom_abline(slope = 1,intercept = 0,col='red',lty=1)+
-#   scale_x_continuous(limits = c(-50,150),expression('Random Forest FCH4 with cardDir and WD ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
-#   scale_y_continuous(limits = c(-50,150),expression('Eddy Covariance FCH4 ('*mu*mol~CO[2]~m^-2~s^-1*')'))+
-#   annotate(geom = 'text',x = 6, y = -8,label=expression(R^2~"= 0.46"),size = 3)+
-#   annotate(geom = 'text',x = 6,y = -10,label=expression(Slope~"= 1.00"),size = 3)+
-#   theme(text = element_text(size = 8))
-# 
-# councilch4.4 
+councilch4.1000.nointeract
 
 ```
+
 #RSME of RF ntree 150 and ntree 1000
 ```{r}
-
 #ntree 150, no wd
 rmse_noWD<- sqrt(mean((test.data.ch4$FCH4.c - test.data.ch4$rfch4)^2, na.rm = TRUE))
 print(paste("RMSE: ntree = 150 ", rmse_noWD)) #RSME 6.11332419169469"
-
 
 #ntree 150, using wd
 rmse150 <- sqrt(mean((test.data.ch4$FCH4.c - test.data.ch4$rfch4.2)^2, na.rm = TRUE))
 print(paste("RMSE: ntree = 150 ", rmse150)) #RSME 5.88378022838222"
 
-#ntree 1000, using wd
+
+#ntree 950, using wd and swc*tsoil interaction --> FINAL MODEL 
+rmse950 <- sqrt(mean((test.data.ch4$FCH4.c - test.data.ch4$rfch4.2)^2, na.rm = TRUE))
+print(paste("RMSE: ntree = 950 with interact ", rmse950)) #"RMSE: 6.66709295747304"
+
+
+#ntree 1000, using wd and swc*tsoil interaction 
 rmse1000 <- sqrt(mean((test.data.ch4$FCH4.c - test.data.ch4$rfch4.1000)^2, na.rm = TRUE))
-print(paste("RMSE: ntree = 1000 ", rmse1000)) #RSME 5.8754464185906" --> very slightly better fit 
+print(paste("RMSE: ntree = 1000 ", rmse1000)) #RSME 6.66709774348876" 
+
+#ntree 1000, using wd and swc*tsoil interaction 
+rmse1000.nointeract <- sqrt(mean((test.data.ch4$FCH4.c - test.data.ch4$rfch4.1000.nointeract)^2, na.rm = TRUE))
+print(paste("RMSE: ntree = 1000, no interact ", rmse1000.nointeract)) #RSME 6.6739047968314" --> slightly worse, keep interaction 
+
+
+
 ```
 
 #Plots and Validation
@@ -979,27 +935,22 @@ ggplot(data = cf)+theme_bw()+
 
 ```
 
-
-
-
 #Observing agreement between modeled and real NEE and CH4 flux data 
 ```{r}
 library(cowplot)
 
 #png(filename = 'C:/Users/karndt.WHRC/Desktop/sites/YKD/plots/2023 yk2unburned gapfilling validation.png',width = 6,height = 4,units = 'in',res = 1000)
-plot_grid(councilnee2,councilch4.2)
+plot_grid(councilnee2,councilch4)
 #dev.off()
 ```
 #Rename refnee.2 and fch4.2
 ```{r}
 library(dplyr)
 
-#removing all the other exploratory rf nee and rf ch4 model results from the cf dataset to leave the two chosen models (which include the wd in degrees, SWC for the tussock location, and ntree=150))
-
-library(dplyr)
+#removing all the other exploratory rf nee and rf ch4 model results from the cf dataset to leave the two chosen models (which include the wd in degrees, SWC for the tussock location, swc*tsoil interaction effect, and respective optimal number of trees))
 
 cf2 <- cf %>%
-  select(-rf_model_1000, -rfnee, -rfch4.1000, -rfch4, -rfnee.3)
+  select(-rfnee.nointeract, -rfnee.1000interact, -rfnee.1000, -rfch4.1000, -rfch4.1000.nointeract)
 
 
 
@@ -1011,6 +962,6 @@ cf2 <- cf2 %>%
 #Save the gapfilled data 
 ```{r,error=FALSE,warning=FALSE}
 #write.csv(x = cf,file = "./council_2017_2023_gf.csv",row.names = F) #_gf to indicate it's been gapfilled 
-write.csv(x= cf2, file = "C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_2017_2023_gf.csv")
+write.csv(x= cf2, file = "C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_2017_2023_gf_tuss.csv")  #added "tuss" to differentiate lichen/berries, margin pond, and tussock locations for SWC and temp 
 ```
 

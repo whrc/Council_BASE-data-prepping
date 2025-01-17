@@ -38,10 +38,10 @@ library(openair)
 
 
 #using ".2" for updated SWC 
-df = fread(input = "C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/US-NGC2.2_HH_201701010000_202309010000.csv", na.strings = "-9999")
+#df = fread(input = "C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/US-NGC2.2_HH_201701010000_202309010000.csv", na.strings = "-9999")
 ##na.strings = c('-9999','NA','NaN','NAN','-7999')
 
-
+df = fread(input ="C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/US-NGC2.2_HH_201701010000_202309010000.csv", na.strings = "-9999")
 
 
 ```
@@ -144,6 +144,6 @@ write.csv(x = df,file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapf
 #daily avg df with night fluxes -- added ".2" to indicated from updated SWC
 write.csv(x = df_avg,file = 'C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_AVG_gapfilled_clean_2017_2023_for analysis.2.csv',quote = F,row.names = F)
 
-#Reminder note, re-ran all these on 1/3/25 based on the updated RF model using the SWC from tussock (originally from pond, SWC_1) --> added a ".2" to differentiate the previous flux dataset to the new one based on the adj SWC 
+#Reminder note, re-ran all these on 1/17/25 based on the updated RF model with optimal # of trees, using the SWC from tussock (originally from pond, SWC_1), and swc*tsoil interaction effect --> added a ".2" to differentiate the previous flux dataset to the new one based on the adj SWC 
 
 ```

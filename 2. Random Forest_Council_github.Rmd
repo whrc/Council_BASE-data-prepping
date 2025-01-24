@@ -102,15 +102,16 @@ hist(train$swc)
 hist(test$swc)
 
 #run random forest to predict missing SWC values 
-rf.swc = randomForest(formula = swc ~ tair + rh + rg + ws + wd + tsoil + vpd + le + h,data = train,ntree = 150)
-#tried various tree numbers, no sig improvement after 300....very minimal diff between 150 and 300, and 150 looks slightly better.
+rf.swc = randomForest(formula = swc ~ tair + rh + rg + ws + wd + tsoil + vpd + le + h, data = train, ntree = 800)
+#per OOB errors, optimal # of tress for SWC gapfilling (using SWC3, tussock), is 800 
+#used ntree=150 before 
 
 #predict it on the full data set
-swc.rf = predict(object = rf.swc,newdata = ncf)
+swc.rf = predict(object = rf.swc, newdata = ncf)
 ncf$swc.rf = swc.rf #add the variable to the main data frame
 
 
-Sys.time() - orig #stop timer --> about  5 min
+Sys.time() - orig #stop timer --> about  5 min for 150, about 50 min for 800
 ```
 
 
@@ -126,13 +127,15 @@ ggplot(data = ncf)+
 #validation dataset from only test data
 val = merge(test,ncf,by = "date",all.x = T)
 
-ggplot(data = val,aes(swc.rf,swc.x))+theme_bw()+geom_abline(slope = 1,intercept = 0,col='red')+
+ggplot(data = val,aes(swc.rf.y,swc.x))+theme_bw()+geom_abline(slope = 1,intercept = 0,col='red')+
   geom_point(alpha=0.1)+
   scale_x_continuous(limits = c(0,70),"RF SWC (%)")+
   scale_y_continuous(limits = c(0,70),"Measured SWC (%)")
 
+
+
 #summary stats on gap filling
-summary(lm(val$swc.x ~ val$swc.rf)) #R2 = 0.97, slope = 1.02
+summary(lm(val$swc.x ~ val$swc.rf.y)) #R2 = 0.97, slope = 1.02
 
 #create final gap free soil moisture
 ncf$swc = ifelse(is.na(ncf$swc),ncf$swc.rf,ncf$swc)
@@ -239,19 +242,19 @@ print(importance_values)
 # Plot the importance values
 varImpPlot(rfnee.2, type = 1, main = "NEE: Variable Importance (%IncMSE)")
 
-#Results
+#Results from ntree = 850
 #                   %IncMSE
-# tair             37.09071
-# rh               75.07910
-# rg               42.21997
-# ws               83.30741
-# wd              109.71833
-# tsoil            55.62251
-# swc             101.45663
-# vpd              46.77654
-# le               64.10837
-# h                73.46502
-# TS_SWC_interact  54.25937
+# tair             41.45073
+# rh               73.40076
+# rg               46.32502
+# ws               82.69876
+# wd              113.00751
+# tsoil            57.68105
+# swc             105.20490
+# vpd              46.89792
+# le               60.09180
+# h                74.56083
+# TS_SWC_interact  53.37965
 
 #removing swc*tsoil interaction 
 rfnee.nointeract = randomForest(formula = nee ~ tair + rh + rg + ws + wd + tsoil + swc + vpd + le + h, data = train.nee, ntree = 850, importance=T)
@@ -640,17 +643,17 @@ varImpPlot(rfch4.2, type = 1, main = "FCH4: Variable Importance (%IncMSE), ntree
 
 #Results
 #                   %IncMSE
-# tair             66.86343
-# rh               97.37551
-# rg               62.44024
-# ws              139.45953
-# wd              162.68689
-# tsoil            84.69990
-# vpd              66.22953
-# swc             141.36516
-# h                90.81950
-# le               82.76800
-# TS_SWC_interact  73.05598
+# tair             71.33973
+# rh              102.17358
+# rg               64.94474
+# ws              130.02763
+# wd              160.38979
+# tsoil            76.85577
+# vpd              65.92918
+# swc             138.76444
+# h                86.83067
+# le               76.71211
+# TS_SWC_interact  71.71983
 
 #ntree = 1000, added wd (degrees) & swc*tsoil interaction -- used this version of the model***********  
 rfch4.1000 = randomForest(formula = fch4 ~ tair + rh + rg + ws + wd + tsoil + vpd + swc + h + le + TS_SWC_interact, data = train.ch4, ntree = 1000, importance = TRUE)
@@ -762,7 +765,7 @@ print(importance_plot_FCH4)
 #Save image 
 ggsave(
   filename = "C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/Importance_plot_IncMSE_CH4.png",  # File name and extension
-  plot = importance_plot_NEE,   # The plot to save (default is the last plot created)
+  plot = importance_plot_FCH4,   # The plot to save (default is the last plot created)
   width = 18,                 # Width in inches
   height = 10,                # Height in inches
   dpi = 600,                 # Resolution in dots per inch
@@ -783,7 +786,7 @@ ggsave(
 test.data.ch4 = merge(test.ch4,cf,by = 'date',all.x = T)
 
 #with wd, with swc*tsoil interaction, ntree = 950
-summary(lm(test.data.ch4$FCH4.c ~ test.data.ch4$rfch4.2)) #R2 = 0.483; slope = 1.017 
+summary(lm(test.data.ch4$FCH4.c ~ test.data.ch4$rfch4.2)) #R2 = 0.485; slope = 1.018
 
 
 councilch4 = ggplot(data = test.data.ch4,aes(rfch4.2,FCH4.c))+theme_bw()+
@@ -795,7 +798,7 @@ councilch4 = ggplot(data = test.data.ch4,aes(rfch4.2,FCH4.c))+theme_bw()+
   scale_x_continuous(limits = c(-50,150),expression('Random Forest '*CH[4]~flux~" ("*mu*mol~CH[4]~m^-2~s^-1*')'))+
   scale_y_continuous(limits = c(-50,150),expression('Eddy Covariance '*CH[4]~flux~" ("*mu*mol~CH[4]~m^-2~s^-1*')'))+
   annotate(geom = 'text',x = 100,y = 20,label = expression(R^2~"= 0.48"),size = 3)+
-  annotate(geom= 'text',x = 100,y = 10,label = expression(Slope~"= 1.017"),size = 3)+
+  annotate(geom= 'text',x = 100,y = 10,label = expression(Slope~"= 1.018"),size = 3)+
   theme(text = element_text(size = 8))
 
 councilch4
@@ -949,19 +952,21 @@ library(dplyr)
 
 #removing all the other exploratory rf nee and rf ch4 model results from the cf dataset to leave the two chosen models (which include the wd in degrees, SWC for the tussock location, swc*tsoil interaction effect, and respective optimal number of trees))
 
-cf2 <- cf %>%
-  select(-rfnee.nointeract, -rfnee.1000interact, -rfnee.1000, -rfch4.1000, -rfch4.1000.nointeract)
+# cf2 <- cf %>%
+#   select(-rfnee.nointeract, -rfnee.1000interact, -rfnee.1000, -rfch4.1000, -rfch4.1000.nointeract)
+# 
+# cf2 <- cf2 %>%
+#   rename(rfnee = rfnee.2, rfch4 = rfch4.2)
 
-
-
-cf2 <- cf2 %>%
+#for when you re-run and don't include all the exploratory models 
+cf <- cf %>%
   rename(rfnee = rfnee.2, rfch4 = rfch4.2)
 ```
 
 
-#Save the gapfilled data 
+#Save the gapfilled data - double check you use the correct cf vs cf2 depending on how you ran this 
 ```{r,error=FALSE,warning=FALSE}
 #write.csv(x = cf,file = "./council_2017_2023_gf.csv",row.names = F) #_gf to indicate it's been gapfilled 
-write.csv(x= cf2, file = "C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_2017_2023_gf_tuss.csv")  #added "tuss" to differentiate lichen/berries, margin pond, and tussock locations for SWC and temp 
+write.csv(x= cf, file = "C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/council_2017_2023_gf_tuss.csv")  #added "tuss" to differentiate lichen/berries, margin pond, and tussock locations for SWC and temp 
 ```
 

@@ -75,7 +75,7 @@ summary(reddy$RH) #no values over 100 allowed (Relative humidity, can't be over 
 
 #run this chunk only if needed (if the variables violate the constraints per the code chunk above)
 ```{r}
-#only run these if there are violations in the above chunk - otherwise, skip 
+#only run these if there are violations in the above chunk - otherwise, skip this chunk 
 reddy$Rg = reddy$Rg - min(reddy$Rg)
 reddy$Rg = ifelse(reddy$Rg < 0,0,reddy$Rg) #set negatives to 0
 reddy$RH = ifelse(reddy$RH > 100,100,reddy$RH)

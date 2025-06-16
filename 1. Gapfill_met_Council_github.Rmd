@@ -9,7 +9,7 @@ date: "2024-09-17"
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-knitr::opts_knit$set(root.dir = 'C:/Users/karndt.WHRC/Desktop/sites/YKD/Ameriflux YK/unburned/') #use this to set your directory or use the code in the next chunk to set working directory 
+#knitr::opts_knit$set(root.dir = 'C:/Users/karndt.WHRC/Desktop/sites/YKD/Ameriflux YK/unburned/') #use this to set your directory or use the code in the next chunk to set working directory 
 ```
 
 #Libraries & Data 
@@ -20,6 +20,7 @@ library(data.table)
 library(ggplot2)
 library(zoo)
 library(cowplot)
+library(dplyr)
 Sys.setenv(TZ = "UTC")
 
 #set working directory
@@ -218,6 +219,7 @@ ggplot(data = all,aes(airt,TA.c))+theme_bw()+
 ```
 
 
+
 #SoilT
 ```{r}
 ggplot(data = all)+
@@ -225,15 +227,16 @@ ggplot(data = all)+
   geom_point(aes(date,st2,col='ERA5.2'))+
   geom_point(aes(date,all$TS_1_1_1.c,col='Site1'))+
   geom_point(aes(date,all$TS_2_1_1.c,col='Site2'))+
-  geom_point(aes(date,all$TS_3_1_1.c,col='Site3'))
+  geom_point(aes(date,all$TS_3_1_1.c,col='Site3'))+
    geom_point(aes(date,all$TS_4_1_1.c,col='Site4'))
    
-soilt.mod = lm(formula = all$TS_2_1_1.c ~ all$st2)
+#changed from TS2 to TS3 (tussock) & re-ran code on 6/16/2025
+soilt.mod = lm(formula = all$TS_3_1_1.c ~ all$st2)
 all$tsoil.eramod = all$st2*soilt.mod$coefficients[2] + soilt.mod$coefficients[1]           
 
 ggplot(data = all)+
   geom_point(aes(date,st2,col='ERA5'))+
-  geom_point(aes(date,TS_2_1_1.c,col='Site'))+
+  geom_point(aes(date,TS_3_1_1.c,col='Site'))+
   geom_point(aes(date,tsoil.eramod,col='Lin. Reg.'))
 ```
 
@@ -261,6 +264,7 @@ ggplot(data = all,aes(rad,SW_IN.c))+theme_bw()+
   geom_abline(slope = 1,intercept = 0,col='red',lty=2)
 ```
 
+
 #ws - wind speed 
 ```{r}
 #WS not re-cleaned, so keeping the original WS variable  
@@ -277,7 +281,10 @@ ggplot(data = all,aes(ws,WS))+theme_bw()+
   geom_point()+
   geom_smooth(method = 'lm')+
   geom_abline(slope = 1,intercept = 0,col='red',lty=2)
+
 ```
+
+
 #Le - latent heat flux 
 ```{r}
 #changed to LE.c to use re-cleaned data 
@@ -294,6 +301,7 @@ ggplot(data = all,aes(le,LE.c))+theme_bw()+
   geom_point()+
   geom_smooth(method = 'lm')+
   geom_abline(slope = 1,intercept = 0,col='red',lty=2)
+
 ```
 #H - sensible heat flux 
 ```{r}
@@ -311,6 +319,7 @@ ggplot(data = all,aes(h,H.c))+theme_bw()+
   geom_point()+
   geom_smooth(method = 'lm')+
   geom_abline(slope = 1,intercept = 0,col='red',lty=2)
+
 ```
 
 
@@ -353,7 +362,8 @@ vpd = ggplot(data = all,aes(vpd.era,vpd.site))+theme_bw()+
   scale_x_continuous(expression("ERA5 VPD ("*Wm^-2*")"))+
   scale_y_continuous(expression("Site VPD ("*Wm^-2*")"))
 
-st = ggplot(data = all,aes(st2,TS_2_1_1.c))+theme_bw()+
+#changed from TS2 to TS3 6/16/25 & re-ran code 
+st = ggplot(data = all,aes(st2,TS_3_1_1.c))+theme_bw()+
     geom_point(alpha = 0.25)+
     geom_smooth(method = 'lm')+
   geom_abline(slope = 1,intercept = 0,col='red',lty=2)+
@@ -396,7 +406,8 @@ h = ggplot(data = all,aes(h,H.c))+theme_bw()+
   scale_x_continuous(expression("ERA5 H ("*Wm^-2*")"))+
   scale_y_continuous(expression("Site H ("*Wm^-2*")"))
 
-swc = ggplot(data = all,aes(vwc1*100,SWC_1_1_1.c))+theme_bw()+
+#changed from SWC1 to SWC3 6/16/2025
+swc = ggplot(data = all,aes(vwc1*100,SWC_3_1_1.c))+theme_bw()+
   geom_point(alpha = 0.25)+
   geom_smooth(method = 'lm')+
   geom_abline(slope = 1,intercept = 0,col='red',lty=2)+
@@ -409,6 +420,7 @@ plot_grid(ta,rh,vpd,st,sw,ws,wd,le,h,swc)
 #dev.off()
 
 #All look decent except for SWC and WD which clearly are having a rough time
+
 ```
 #Select variables of interest from ERA5 / Reduce down to Council size; add adjusted ERA5 model to final data set
 ```{r}

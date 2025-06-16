@@ -18,7 +18,7 @@ knitr::opts_chunk$set(echo = TRUE,dev = 'png')
 #Load in required packages
 ```{r,error=FALSE,warning=FALSE}
 rm(list = ls()) #clear obj from environment 
-gc() #garbage collection to free up R memory
+#gc() #garbage collection to free up R memory
 library(data.table)
 library(ggplot2)
 library(caret)

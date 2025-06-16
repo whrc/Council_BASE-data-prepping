@@ -252,6 +252,9 @@ era <- era %>%
     )
   )
 
+#these give slightly different wind directions than using the degrees ** 
+
+
 #Testing the calcs - was just double checking various ways to calc cardinal directions 
 
 #example data:

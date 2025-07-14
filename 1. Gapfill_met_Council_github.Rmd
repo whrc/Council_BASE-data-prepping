@@ -216,6 +216,8 @@ ggplot(data = all,aes(airt,TA.c))+theme_bw()+
   geom_point()+
   geom_smooth(method = 'lm')+
   geom_abline(slope = 1,intercept = 0,col='red',lty=2)
+
+
 ```
 
 
@@ -238,6 +240,11 @@ ggplot(data = all)+
   geom_point(aes(date,st2,col='ERA5'))+
   geom_point(aes(date,TS_3_1_1.c,col='Site'))+
   geom_point(aes(date,tsoil.eramod,col='Lin. Reg.'))
+
+
+# # Fill gaps using the linear model
+# df$TS_3_1_1_gapfilled[gaps] <- predict(gapfill_model, 
+#                                         newdata = df[gaps, ])
 ```
 
 #Rg (SW-IN)  - global radiation 

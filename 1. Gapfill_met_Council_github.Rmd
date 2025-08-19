@@ -188,7 +188,7 @@ ggplot(data = all,aes(wd,WD))+
 #KK 10.28.2024: added the ".c" to use re-cleaned data from Dani 
 
 rh.mod = lm(formula = all$RH.c ~ all$rh)
-summary(rh.mod)
+summary(rh.mod) #R2 = 0.23, slope = 0.76
 
 all$rh.eramod = all$rh*rh.mod$coefficients[2] + rh.mod$coefficients[1]   
 
@@ -200,6 +200,78 @@ ggplot(data = all,aes(rh,RH.c))+
   geom_point()+
   geom_smooth(method = 'lm')+
   geom_abline(slope = 1,intercept = 0,col='red',lty=2)
+
+#make cleaner fig to show ERA5 vs site measurements for paper 
+
+RH_plot <- ggplot(data = all, aes(x = rh, y = RH.c)) +
+  theme_bw() +
+  geom_point() +
+  # Linear fit (blue solid line)
+  geom_smooth(method = "lm",
+              aes(color = "Linear fit", linetype = "Linear fit"),
+              se = FALSE) +
+  # 1:1 line (red dashed line)
+  geom_abline(aes(slope = 1, intercept = 0,
+                  color = "1:1 line", linetype = "1:1 line")) +
+  # Axis labels
+  labs(x = "ERA5 Relative Humidity (%)",
+       y = "Site Relative Humidity (%)",
+       color = "", linetype = "") +
+  # Manually set colors and linetypes
+  scale_color_manual(values = c("Linear fit" = "blue", "1:1 line" = "red")) +
+  scale_linetype_manual(values = c("Linear fit" = "solid", "1:1 line" = "dashed")) +
+  theme(legend.position = "bottom") +
+  # Annotations
+  annotate("text",
+           x = 30, y = 140,
+           hjust = -0.1, vjust = 1.3,
+           label = "R² = 0.23", size = 5) +
+  annotate("text",
+           x = 30, y = 125,
+           hjust = -0.1, vjust = 1.3,
+           label = "Slope = 0.76", size = 5) +
+    #Title for the plot 
+   labs(title = "Relative Humidity") 
+
+print(RH_plot)
+
+
+#Modified ERA5 vs site agreement 
+rh_modified = lm(formula = all$RH.c ~ all$rh.eramod)
+summary(rh_modified) #R2 = 0.23, slope = 1
+
+RH_plot2 <- ggplot(data = all, aes(x = rh.eramod, y = RH.c)) +
+  theme_bw() +
+  geom_point() +
+  # Linear fit (blue solid line)
+  geom_smooth(method = "lm",
+              aes(color = "Linear fit", linetype = "Linear fit"),
+              se = FALSE) +
+  # 1:1 line (red dashed line)
+  geom_abline(aes(slope = 1, intercept = 0,
+                  color = "1:1 line", linetype = "1:1 line")) +
+  # Axis labels
+  labs(x = "Modified ERA5 Relative Humidity (%)",
+       y = "Site Relative Humidity (%)",
+       color = "", linetype = "") +
+  # Manually set colors and linetypes
+  scale_color_manual(values = c("Linear fit" = "blue", "1:1 line" = "red")) +
+  scale_linetype_manual(values = c("Linear fit" = "solid", "1:1 line" = "dashed")) +
+  theme(legend.position = "bottom") +
+  # Annotations
+  annotate("text",
+           x = 20, y = 140,
+           hjust = -0.1, vjust = 1.3,
+           label = "R² = 0.23", size = 5) +
+  annotate("text",
+           x = 20, y = 125,
+           hjust = -0.1, vjust = 1.3,
+           label = "Slope = 1", size = 5) +
+    #Title for the plot 
+   labs(title = "Modified ERA5 Relative Humidity") 
+
+print(RH_plot2)
+
 ```
 #AirT
 ```{r}
@@ -208,7 +280,7 @@ ggplot(data = all)+
   geom_point(aes(date,all$TA.c,col='Site'))
 
 airt.mod = lm(formula = all$TA.c ~ all$airt)
-summary(airt.mod)
+summary(airt.mod) #R2 = 0.96; slope = 0.94
 
 all$airt.eramod = all$airt*airt.mod$coefficients[2] + airt.mod$coefficients[1]     
 
@@ -218,8 +290,80 @@ ggplot(data = all,aes(airt,TA.c))+theme_bw()+
   geom_abline(slope = 1,intercept = 0,col='red',lty=2)
 
 
-```
+#make cleaner fig to show ERA5 and site air temp agreement for paper
 
+airtemp_plot <- ggplot(data = all, aes(x = airt, y = TA.c)) +
+  theme_bw() +
+  geom_point() +
+  # Linear fit (blue solid line)
+  geom_smooth(method = "lm",
+              aes(color = "Linear fit", linetype = "Linear fit"),
+              se = FALSE) +
+  # 1:1 line (red dashed line)
+  geom_abline(aes(slope = 1, intercept = 0,
+                  color = "1:1 line", linetype = "1:1 line")) +
+  # Axis labels
+  labs(x = "ERA5 Air Temperature (°C)",
+       y = "Site Air Temperature (°C)",
+       color = "", linetype = "") +
+  # Manually set colors and linetypes
+  scale_color_manual(values = c("Linear fit" = "blue", "1:1 line" = "red")) +
+  scale_linetype_manual(values = c("Linear fit" = "solid", "1:1 line" = "dashed")) +
+  theme(legend.position = "bottom") +
+  # Annotations
+  annotate("text",
+           x = -41, y = 30,
+           hjust = -0.1, vjust = 1.3,
+           label = "R² = 0.96", size = 5) +
+  annotate("text",
+           x = -41, y = 25,
+           hjust = -0.1, vjust = 1.3,
+           label = "Slope = 0.94", size = 5) +
+    #Title for the plot 
+   labs(title = "Air Temperature") 
+
+print(airtemp_plot)
+
+
+#Modified ERA5 vs site agreement 
+airt_modified = lm(formula = all$TA.c ~ all$airt.eramod)
+summary(airt_modified) #R2 = 0.96; slope = 1
+
+airtemp_plot2 <- ggplot(data = all, aes(x = airt.eramod, y = TA.c)) +
+  theme_bw() +
+  geom_point() +
+  # Linear fit (blue solid line)
+  geom_smooth(method = "lm",
+              aes(color = "Linear fit", linetype = "Linear fit"),
+              se = FALSE) +
+  # 1:1 line (red dashed line)
+  geom_abline(aes(slope = 1, intercept = 0,
+                  color = "1:1 line", linetype = "1:1 line")) +
+  # Axis labels
+  labs(x = "Modified ERA5 Air Temperature (°C)",
+       y = "Site Air Temperature (°C)",
+       color = "", linetype = "") +
+  # Manually set colors and linetypes
+  scale_color_manual(values = c("Linear fit" = "blue", "1:1 line" = "red")) +
+  scale_linetype_manual(values = c("Linear fit" = "solid", "1:1 line" = "dashed")) +
+  theme(legend.position = "bottom") +
+  # Annotations
+  annotate("text",
+           x = -41, y = 30,
+           hjust = -0.1, vjust = 1.3,
+           label = "R² = 0.96", size = 5) +
+  annotate("text",
+           x = -41, y = 25,
+           hjust = -0.1, vjust = 1.3,
+           label = "Slope = 0.1", size = 5) +
+    #Title for the plot 
+   labs(title = "Modified ERA5 Air Temperature") 
+
+print(airtemp_plot2)
+
+
+
+```
 
 
 #SoilT
@@ -234,6 +378,8 @@ ggplot(data = all)+
    
 #changed from TS2 to TS3 (tussock) & re-ran code on 6/16/2025
 soilt.mod = lm(formula = all$TS_3_1_1.c ~ all$st2)
+summary(soilt.mod) #R2 = 0.87, slope = 0.797 = 0.80
+
 all$tsoil.eramod = all$st2*soilt.mod$coefficients[2] + soilt.mod$coefficients[1]           
 
 ggplot(data = all)+
@@ -241,10 +387,51 @@ ggplot(data = all)+
   geom_point(aes(date,TS_3_1_1.c,col='Site'))+
   geom_point(aes(date,tsoil.eramod,col='Lin. Reg.'))
 
+#make cleaner fig to show ERA5 and site soil temp agreement for paper
+
+soiltemp_plot <- ggplot(data = all, aes(x = st2, y = TS_3_1_1.c)) +
+  theme_bw() +
+  geom_point() +
+  # Linear fit (blue solid line)
+  geom_smooth(method = "lm",
+              aes(color = "Linear fit", linetype = "Linear fit"),
+              se = FALSE) +
+  # 1:1 line (red dashed line)
+  geom_abline(aes(slope = 1, intercept = 0,
+                  color = "1:1 line", linetype = "1:1 line")) +
+  # Axis labels
+  labs(x = "ERA5 Soil Temperature (°C)",
+       y = "Site Soil Temperature at 15cm (°C)",
+       color = "", linetype = "") +
+  # Manually set colors and linetypes
+  scale_color_manual(values = c("Linear fit" = "blue", "1:1 line" = "red")) +
+  scale_linetype_manual(values = c("Linear fit" = "solid", "1:1 line" = "dashed")) +
+  theme(legend.position = "bottom") +
+  # Annotations
+  annotate("text",
+           x = -10, y = 30,
+           hjust = -0.1, vjust = 1.3,
+           label = "R² = 0.87", size = 5) +
+  annotate("text",
+           x = -10, y = 25,
+           hjust = -0.1, vjust = 1.3,
+           label = "Slope = 0.80", size = 5) +
+    #Title for the plot 
+   labs(title = "Soil Temperature") 
+
+print(soiltemp_plot)
+
+
+#modified ERA5
+soilt_modified = lm(formula = all$TS_3_1_1.c ~ all$tsoil.eramod)
+summary(soilt_modified) #R2 = 0.87, slope = 1
+
 
 # # Fill gaps using the linear model
 # df$TS_3_1_1_gapfilled[gaps] <- predict(gapfill_model, 
 #                                         newdata = df[gaps, ])
+
+
 ```
 
 #Rg (SW-IN)  - global radiation 
@@ -261,7 +448,7 @@ ggplot(data = all)+
   scale_x_datetime(limits = as.POSIXct(c('2019-06-20','2019-07-1')))
 
 rad.mod = lm(formula = all$SW_IN.c ~ all$rad)
-summary(rad.mod)
+summary(rad.mod) #R2 = 0.8459; slope = 0.98
 
 all$rad.eramod = all$rad*rad.mod$coefficients[2] + rad.mod$coefficients[1]   
 
@@ -269,6 +456,47 @@ ggplot(data = all,aes(rad,SW_IN.c))+theme_bw()+
   geom_point()+
   geom_smooth(method = 'lm')+
   geom_abline(slope = 1,intercept = 0,col='red',lty=2)
+
+
+#make cleaner fig to show ERA5 vs site agreement for paper 
+
+rad_plot <- ggplot(data = all, aes(x = rad, y = SW_IN.c)) +
+  theme_bw() +
+  geom_point() +
+  # Linear fit (blue solid line)
+  geom_smooth(method = "lm",
+              aes(color = "Linear fit", linetype = "Linear fit"),
+              se = FALSE) +
+  # 1:1 line (red dashed line)
+  geom_abline(aes(slope = 1, intercept = 0,
+                  color = "1:1 line", linetype = "1:1 line")) +
+  # Axis labels
+  labs(x = "ERA5 Radiation (W/m²)",
+       y = "Site SW_IN (W/m²)",
+       color = "", linetype = "") +
+  # Manually set colors and linetypes
+  scale_color_manual(values = c("Linear fit" = "blue", "1:1 line" = "red")) +
+  scale_linetype_manual(values = c("Linear fit" = "solid", "1:1 line" = "dashed")) +
+  theme(legend.position = "bottom") +
+  # Annotations
+  annotate("text",
+           x = 0, y = 990,
+           hjust = -0.1, vjust = 1.3,
+           label = "R² = 0.84", size = 5) +
+  annotate("text",
+           x = 0, y = 930,
+           hjust = -0.1, vjust = 1.3,
+           label = "Slope = 0.98", size = 5) +
+    #Title for the plot 
+   labs(title = "Radiation") 
+
+print(rad_plot)
+
+
+#modified ERA5
+rad_modified = lm(formula = all$SW_IN.c ~ all$rad.eramod)
+summary(rad_modified) #R2 = 0.84, slope = 1
+
 ```
 
 
@@ -280,7 +508,7 @@ ggplot(data = all)+
   geom_point(aes(date,all$WS,col='Site'))
 
 ws.mod = lm(formula = all$WS ~ all$ws)
-summary(ws.mod)
+summary(ws.mod) #R2 = 0.45; slope = 0.898
 
 all$ws.eramod = all$ws*ws.mod$coefficients[2] + ws.mod$coefficients[1]    
 
@@ -288,6 +516,45 @@ ggplot(data = all,aes(ws,WS))+theme_bw()+
   geom_point()+
   geom_smooth(method = 'lm')+
   geom_abline(slope = 1,intercept = 0,col='red',lty=2)
+
+#make cleaner fig to show ERA5 vs site agreement for paper 
+
+ws_plot <- ggplot(data = all, aes(x = ws, y = WS)) +
+  theme_bw() +
+  geom_point() +
+  # Linear fit (blue solid line)
+  geom_smooth(method = "lm",
+              aes(color = "Linear fit", linetype = "Linear fit"),
+              se = FALSE) +
+  # 1:1 line (red dashed line)
+  geom_abline(aes(slope = 1, intercept = 0,
+                  color = "1:1 line", linetype = "1:1 line")) +
+  # Axis labels
+  labs(x = "ERA5 WS (m/s)",
+       y = "Site WS (m/s)",
+       color = "", linetype = "") +
+  # Manually set colors and linetypes
+  scale_color_manual(values = c("Linear fit" = "blue", "1:1 line" = "red")) +
+  scale_linetype_manual(values = c("Linear fit" = "solid", "1:1 line" = "dashed")) +
+  theme(legend.position = "bottom") +
+  # Annotations
+  annotate("text",
+           x = 0, y = 20,
+           hjust = -0.1, vjust = 1.3,
+           label = "R² = 0.45", size = 5) +
+  annotate("text",
+           x = 0, y = 18,
+           hjust = -0.1, vjust = 1.3,
+           label = "Slope = 0.90", size = 5) +
+    #Title for the plot 
+   labs(title = "Wind Speed") 
+
+print(ws_plot)
+
+
+#modified ERA5
+ws_modified = lm(formula = all$WS ~ all$ws.eramod)
+summary(ws_modified) #R2 = 0.45, slope = 1
 
 ```
 
@@ -300,7 +567,7 @@ ggplot(data = all)+
   geom_point(aes(date,LE.c,col='Site'))
 
 le.mod = lm(formula = all$LE.c ~ all$le)
-summary(le.mod)
+summary(le.mod) #R2 = 0.55, slope = 0.55
 
 all$le.eramod = all$le*le.mod$coefficients[2] + le.mod$coefficients[1]    
 
@@ -308,6 +575,47 @@ ggplot(data = all,aes(le,LE.c))+theme_bw()+
   geom_point()+
   geom_smooth(method = 'lm')+
   geom_abline(slope = 1,intercept = 0,col='red',lty=2)
+
+
+#make cleaner fig to show ERA5 vs site agreement for paper 
+
+LE_plot <- ggplot(data = all, aes(x = le, y = LE.c)) +
+  theme_bw() +
+  geom_point() +
+  # Linear fit (blue solid line)
+  geom_smooth(method = "lm",
+              aes(color = "Linear fit", linetype = "Linear fit"),
+              se = FALSE) +
+  # 1:1 line (red dashed line)
+  geom_abline(aes(slope = 1, intercept = 0,
+                  color = "1:1 line", linetype = "1:1 line")) +
+  # Axis labels
+  labs(x = "ERA5 LE (W/m²)",
+       y = "Site LE (W/m²)",
+       color = "", linetype = "") +
+  # Manually set colors and linetypes
+  scale_color_manual(values = c("Linear fit" = "blue", "1:1 line" = "red")) +
+  scale_linetype_manual(values = c("Linear fit" = "solid", "1:1 line" = "dashed")) +
+  theme(legend.position = "bottom") +
+  # Annotations
+  annotate("text",
+           x = -50, y = 450,
+           hjust = -0.1, vjust = 1.3,
+           label = "R² = 0.55", size = 5) +
+  annotate("text",
+           x = -50, y = 400,
+           hjust = -0.1, vjust = 1.3,
+           label = "Slope = 0.55", size = 5) +
+    #Title for the plot 
+   labs(title = "Latent Heat Turbulent Flux") 
+
+print(LE_plot)
+
+
+#modified ERA5
+LE_modified = lm(formula = all$LE.c ~ all$le.eramod)
+summary(LE_modified) #R2 = 0.55, slope = 1
+
 
 ```
 #H - sensible heat flux 
@@ -318,7 +626,7 @@ ggplot(data = all)+
   geom_point(aes(date,H.c,col='Site'))
 
 h.mod = lm(formula = all$H.c ~ all$h)
-summary(h.mod)
+summary(h.mod)#R2 = 0.6552, slope = 0.84
 
 all$h.eramod = all$h*h.mod$coefficients[2] + h.mod$coefficients[1]    
 
@@ -326,6 +634,79 @@ ggplot(data = all,aes(h,H.c))+theme_bw()+
   geom_point()+
   geom_smooth(method = 'lm')+
   geom_abline(slope = 1,intercept = 0,col='red',lty=2)
+
+
+#make cleaner fig to show ERA5 vs site agreement for paper 
+
+H_plot <- ggplot(data = all, aes(x = h, y = H.c)) +
+  theme_bw() +
+  geom_point() +
+  # Linear fit (blue solid line)
+  geom_smooth(method = "lm",
+              aes(color = "Linear fit", linetype = "Linear fit"),
+              se = FALSE) +
+  # 1:1 line (red dashed line)
+  geom_abline(aes(slope = 1, intercept = 0,
+                  color = "1:1 line", linetype = "1:1 line")) +
+  # Axis labels
+  labs(x = "ERA5 H (W/m²)",
+       y = "Site H (W/m²)",
+       color = "", linetype = "") +
+  # Manually set colors and linetypes
+  scale_color_manual(values = c("Linear fit" = "blue", "1:1 line" = "red")) +
+  scale_linetype_manual(values = c("Linear fit" = "solid", "1:1 line" = "dashed")) +
+  theme(legend.position = "bottom") +
+  # Annotations
+  annotate("text",
+           x = -150, y = 400,
+           hjust = -0.1, vjust = 1.3,
+           label = "R² = 0.65", size = 5) +
+  annotate("text",
+           x = -150, y = 350,
+           hjust = -0.1, vjust = 1.3,
+           label = "Slope = 0.84", size = 5) +
+    #Title for the plot 
+   labs(title = "Sensible Heat Turbulent Flux") 
+
+print(H_plot)
+
+
+#modified ERA5
+H_modified = lm(formula = all$H.c ~ all$h.eramod)
+summary(H_modified) #R2 = 0.65, slope = 1
+
+```
+#arrange ERA5 vs site plots into single figure to show comparisons for paper
+```{r}
+# install.packages("patchwork")  # if needed
+library(patchwork)
+library(ggplot2)
+
+# Arrange (3x3-ish) and collect a single legend at the bottom
+combined <-
+  (RH_plot | airtemp_plot | soiltemp_plot) /
+  (rad_plot | ws_plot | LE_plot) /
+  (H_plot   | plot_spacer() | plot_spacer()) +
+  plot_layout(guides = "collect") &                 # share one legend
+  theme(legend.position = "bottom")                 # put the legend below
+
+# Add a single title
+final_plot <- combined + plot_annotation(
+  title = "ERA5 vs Site Comparisons",
+  theme = theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+)
+
+#make legend bigger 
+final_plot <- final_plot &  # Increase legend text size, key size, and spacing
+  theme(
+    #legend.title = element_text(size = 14),    # Increase legend title size
+    legend.text = element_text(size = 14, face = "bold"),     # Increase legend text size
+    legend.key.size = unit(2, "cm")) 
+
+final_plot
+
+# Then save it
+ ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/combined_ERA5vsSite_met_variables.png", final_plot, width = 20, height = 20, dpi = 600)
 
 ```
 

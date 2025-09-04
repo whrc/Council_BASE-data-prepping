@@ -621,7 +621,7 @@ varImpPlot(rf_model_CH4, type = 1, main = "FCH4: Variable Importance (%IncMSE), 
 
 
 
-#### RF model for CH4 --> per exploratory modeling in a different script, found optimum number of trees for CH4 was 950 per OOB error rate and improved from adding swc*tsoil interaction 
+#### RF model for CH4 --> per exploratory modeling (in Rmd fild Step 1.5), found optimum number of trees for CH4 was 950 per OOB error rate and improved from adding swc*tsoil interaction 
 ```{r}
 orig = Sys.time() #set timer
 

@@ -297,7 +297,7 @@ print(opt_results_nee$errors)
 
 
 
-#OOB ntree for SWC in RF --> just looking, for further work we kept the ntree = 150 since that was used in previous codes for consistency 
+#OOB ntree for SWC in RF --> used ntree = 800 in step 2
 
 #Optimal number of trees for SWC (SWC3)
 

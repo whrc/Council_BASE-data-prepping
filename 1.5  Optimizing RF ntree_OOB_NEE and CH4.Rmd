@@ -126,7 +126,11 @@ df_era2$swc = ifelse(is.na(df_era2$swc),df_era2$swc.rf,df_era2$swc)
 
 ```
 
-
+#SWC-soil temp interaction term 
+```{r}
+# Create interaction term --> explicit interaction term while keeping original terms 
+rf_data$TS_SWC_interact <- rf_data$TS_3_1_1 * rf_data$SWC_3_1_1
+```
 
 
 
@@ -293,7 +297,7 @@ print(opt_results_nee$errors)
 
 
 
-#OOB ntree for SWC in RF
+#OOB ntree for SWC in RF --> just looking, for further work we kept the ntree = 150 since that was used in previous codes for consistency 
 
 #Optimal number of trees for SWC (SWC3)
 

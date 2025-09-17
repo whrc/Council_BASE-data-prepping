@@ -1,5 +1,5 @@
 ---
-title: "Optimizing RF ntree_OOB_NEE and CH4" #using OOB (out of bag error) to determine optimum number of trees for training RF model, checked using RMSE 
+title: "Optimizing RF ntree_OOB_NEE and CH4" #using OOB (out of bag error) to determine optimum number of trees for training RF model - optimal number of trees is lowest ntree with minimal improvement in OOB 
 output: html_document
 date: "2025-08-19"
 ---

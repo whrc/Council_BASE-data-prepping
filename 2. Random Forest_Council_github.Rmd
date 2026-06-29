@@ -3,7 +3,7 @@ title: "2.from kyle_Random Forest Council (Neural Network)"
 #Here, we use the Random Forest model to gapfill data based on predictors and real data - it runs simulations and learns patterns, attempting to fill in gaps based on training data and validation data 
 #Random Forest is used to do a lot of the gap-filling --we could try to improve it by increasing the trees to allow for more complex relationships and we can clean the data a little more to take out outliers (which Dani did Oct 28, 2024 - we use the re-cleaned version here)
 
-##For Council, NOTE: primary windirection is N-S at this location, S is thermokarst and degradation which can be a big methane source, so wind direction could be important at this site --> NOTE: model is elevating CH4 in the winter, may need to revisit training / other relationships we can use to make sure it's more reasonable (no real winter data available to better train model with)
+##For Council, NOTE: primary wind direction is N-S at this location, S is thermokarst and degradation which can be a big methane source, so wind direction could be important at this site --> NOTE: model is elevating CH4 in the winter, may need to revisit training / other relationships we can use to make sure it's more reasonable (no real winter data available to better train model with)
 
 output: html_document
 date: "2024-09-17"
@@ -42,7 +42,7 @@ cf = cf[complete.cases(cf$airt.eramod),]
 ```{r}
 #create a sub data frame of the variables you want for a neural network (random forest)
 #KK Nov 27: added in u, v, wd, and cardinal direction from era df; also changed FC and FCH4 to FC.c, FCH4.c, and SWC_1_1_1.c to use re-cleaned data --> adj to WD from actual data and Cardinal_Direction from actual data as these seem to be era5 data adj by actual data and this uses the actual SWC data from site.
-#####
+
 
 
 #create subset of the variables wanted for training RF
@@ -585,7 +585,7 @@ plot(boruta,las = 2) #plots the variables; green = important, yellow = tentative
 #try random forest for CH4 
 
 ####Subset training and testing datasets 
-```{r,error=FALSE,warning=FALSE}
+```{r}
 #looking at range of data 
 ggplot(data = cc, aes(x=date, y = fch4)) + geom_point()
 
@@ -796,7 +796,7 @@ ggsave(
 
 #Validation - looking at agreement between modeled data and real data 
 
-```{r,error=FALSE,warning=FALSE}
+```{r}
 #changed to FCH4.c to use the re-cleaned data 
 
 #merge datasets if to add the predicted methane to cf dataset for validation 
@@ -886,7 +886,7 @@ print(paste("RMSE: ntree = 1000, no interact ", rmse1000.nointeract)) #RSME 6.67
 ```
 
 #Plots and Validation
-```{r,error=FALSE,warning=FALSE}
+```{r}
 #changed to FCH4.c to use re-cleaned data 
 #Plots modeled vs real data among several dates to observe agreement 
 

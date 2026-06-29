@@ -63,6 +63,8 @@ ggplot(data = df)+
 #remove duplicated time stamp rows
 df = df[!duplicated(df$ts),]
 ```
+
+
 gap fill short gaps in the met data first
 ```{r}
 
@@ -273,6 +275,7 @@ RH_plot2 <- ggplot(data = all, aes(x = rh.eramod, y = RH.c)) +
 print(RH_plot2)
 
 ```
+
 #AirT
 ```{r}
 ggplot(data = all)+
@@ -369,8 +372,8 @@ print(airtemp_plot2)
 #SoilT
 ```{r}
 ggplot(data = all)+
-  geom_point(aes(date,st1,col='ERA5.1'))+
-  geom_point(aes(date,st2,col='ERA5.2'))+
+  geom_point(aes(date,st1,col='ERA5.1'))+ #upper soil layer - layer 1
+  geom_point(aes(date,st2,col='ERA5.2'))+ #deeper soil layer - layer 2
   geom_point(aes(date,all$TS_1_1_1.c,col='Site1'))+
   geom_point(aes(date,all$TS_2_1_1.c,col='Site2'))+
   geom_point(aes(date,all$TS_3_1_1.c,col='Site3'))+
@@ -449,6 +452,7 @@ ggplot(data = all)+
 
 rad.mod = lm(formula = all$SW_IN.c ~ all$rad)
 summary(rad.mod) #R2 = 0.8459; slope = 0.98
+
 
 all$rad.eramod = all$rad*rad.mod$coefficients[2] + rad.mod$coefficients[1]   
 
@@ -618,6 +622,8 @@ summary(LE_modified) #R2 = 0.55, slope = 1
 
 
 ```
+
+
 #H - sensible heat flux 
 ```{r}
 #changed to H.c to use re-cleaned data 
@@ -676,6 +682,97 @@ H_modified = lm(formula = all$H.c ~ all$h.eramod)
 summary(H_modified) #R2 = 0.65, slope = 1
 
 ```
+#SWC
+
+#### ERA5 swc is VWC and is in decimals, needs to be x100 to get % 
+```{r}
+ggplot(data = all)+
+  geom_point(aes(date,vwc1,col='ERA5.1'))+ #upper soil layer - layer 1
+  geom_point(aes(date,vwc2,col='ERA5.2'))+ #deeper soil layer - layer 2
+  geom_point(aes(date,all$SWC_1_1_1.c,col='Site1'))+
+  geom_point(aes(date,all$SWC_2_1_1.c,col='Site2'))+
+  geom_point(aes(date,all$SWC_3_1_1.c,col='Site3'))
+
+  
+all$vwc2.percent <- all$vwc2*100
+all$vwc1.percent <- all$vwc1*100
+
+#changed from SWC2 to SWC3 (tussock) & re-ran code on 6/16/2025
+swc.mod = lm(formula = all$SWC_3_1_1.c ~ all$vwc1.percent)
+summary(swc.mod) #VWC.1: R2 =  0.009353; slope =-0.41045
+#VWC.2: R2 = -7^-6; slope = -0.01428 , p = 0.46
+
+all$swc.eramod = all$vwc2.percent*swc.mod$coefficients[2] + swc.mod$coefficients[1]           
+
+ggplot(data = all)+
+  geom_point(aes(date,vwc2.percent,col='ERA5'))+
+  geom_point(aes(date,SWC_3_1_1.c,col='Site'))+
+  geom_point(aes(date,swc.eramod,col='Lin. Reg.'))
+
+
+#make cleaner fig to show ERA5 and site soil temp agreement for paper
+
+swc_plot <- ggplot(data = all, aes(x = vwc1.percent, y = SWC_3_1_1.c)) +
+  theme_bw() +
+  geom_point() +
+  # Linear fit (blue solid line)
+  geom_smooth(method = "lm",
+              aes(color = "Linear fit", linetype = "Linear fit"),
+              se = FALSE) +
+  # 1:1 line (red dashed line)
+  geom_abline(aes(slope = 1, intercept = 0,
+                  color = "1:1 line", linetype = "1:1 line")) +
+  # Axis labels
+  labs(x = "ERA5 VWC (%)",
+       y = "Site SWC at 15cm (%)",
+       color = "", linetype = "") +
+  # Manually set colors and linetypes
+  scale_color_manual(values = c("Linear fit" = "blue", "1:1 line" = "red")) +
+  scale_linetype_manual(values = c("Linear fit" = "solid", "1:1 line" = "dashed")) +
+  theme(legend.position = "bottom") +
+  # Annotations
+  annotate("text",
+           x = -10, y = 75,
+           hjust = -0.1, vjust = 1.3,
+           label = "R² =   0.009", size = 5) +
+  annotate("text",
+           x = -10, y = 70,
+           hjust = -0.1, vjust = 1.3,
+           label = "Slope = -0.41", size = 5) +
+    #Title for the plot 
+   labs(title = "Soil Moisture at 15 cm") 
+
+print(swc_plot)
+
+
+#modified ERA5
+swc_modified = lm(formula = all$SWC_3_1_1.c ~ all$swc.eramod)
+summary(swc_modified) #VWC.1: R2 =  0.009353; slope =-0.41045
+#VWC2: R2 = -7.006e-06 , slope = 1
+
+ggplot(data = all, aes(x = date, y = vwc2*100))+
+  geom_point()
+
+ggplot(data = all, aes(x = date, y = vwc1*100))+
+  geom_point()
+
+
+swc_comparison_plot  <- ggplot(data = all)+
+  geom_point(aes(date,vwc1*100,col='ERA5'))+
+   geom_point(aes(date,vwc2.percent,col='ERA5.2'))+
+  geom_point(aes(date,SWC_3_1_1.c,col='Site')) +
+  labs(y = "Soil Moisture (%)",
+       x = "Date") +
+  theme_bw() +
+  theme(legend.title = element_blank())
+
+  
+
+swc_comparison_plot
+
+```
+
+
 #arrange ERA5 vs site plots into single figure to show comparisons for paper
 ```{r}
 # install.packages("patchwork")  # if needed
@@ -686,7 +783,7 @@ library(ggplot2)
 combined <-
   (RH_plot | airtemp_plot | soiltemp_plot) /
   (rad_plot | ws_plot | LE_plot) /
-  (H_plot   | plot_spacer() | plot_spacer()) +
+  (H_plot   | swc_plot | plot_spacer()) +
   plot_layout(guides = "collect") &                 # share one legend
   theme(legend.position = "bottom")                 # put the legend below
 
@@ -705,18 +802,22 @@ final_plot <- final_plot &  # Increase legend text size, key size, and spacing
 
 final_plot
 
-# Then save it
- ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/combined_ERA5vsSite_met_variables.png", final_plot, width = 20, height = 20, dpi = 600)
+
 
 ```
 
+#Save combined figure 
+```{r}
+# Then save it
+ ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/combined_ERA5vsSite_met_variables2.png", final_plot, width = 20, height = 20, dpi = 600)
+```
 
 ```{r}
 #remove duplicated timestamp rows
 df = df[!duplicated(df$ts),]
 ```
 
-
+#Agreement between ERA5 and site measurements - pre-modification 
 ```{r}
 #Added ".c" to cleaned data 
 
@@ -810,6 +911,8 @@ plot_grid(ta,rh,vpd,st,sw,ws,wd,le,h,swc)
 #All look decent except for SWC and WD which clearly are having a rough time
 
 ```
+
+
 #Select variables of interest from ERA5 / Reduce down to Council size; add adjusted ERA5 model to final data set
 ```{r}
 #select the data / variables you want from the ERA5 instead of saving all

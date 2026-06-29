@@ -1,5 +1,5 @@
 ---
-title: "9. Optional: Gapfilling TA and TS with ERA5" - adj ERA5 to better match site measurements, then using that to gapfill missing soil temp and air temp. Using this for annual and seasonal averages, popssibly to train RF model for CO2 and CH4 predictions - do not use gapfilled for stats, budgets, etc.* 
+title: "9. Optional: Gapfilling TA and TS with ERA5" - adj ERA5 to better match site measurements, then using that to gapfill missing soil temp and air temp. Using this for annual and seasonal averages, popssibly to train RF model for CO2 and CH4 predictions - do not use gapfilled for stats* 
 output: html_document
 date: "2025-07-07"
 ---
@@ -257,4 +257,95 @@ library(knitr)
 kable(combined_summary, caption = "Gap-filling Summary by Year and Temp Variable")
 ```
 
+
+#Figure to show agreement 
+```{r}
+#tussock 
+plot_TS <- ggplot(data = df) +
+  geom_point(aes(x = date, y = TS_3_1_1, color = "Site Soil Temperature at 15 cm"))+
+  geom_point(aes(x = date, y = TS_ERA5, color = "ERA5 Soil Temperature")) +
+  theme_bw()+
+  labs(
+    x = "Date",
+    y = "Soil Temperature (°C)"
+  ) +
+  theme(
+    legend.title = element_blank(), 
+    legend.position = "none"
+  )
+
+
+plot_TS
+
+#margin pond
+ggplot(data = df) +
+  geom_point(aes(x = date, y = TS_1_1_1, color = "Site Soil Temperature at 15 cm - margin pond"))+
+  geom_point(aes(x = date, y = TS_ERA5, color = "ERA5 Soil Temperature")) +
+  theme_bw()+
+  labs(
+    x = "Date",
+    y = "Soil Temperature (C)"
+  ) +
+  theme(
+    legend.title = element_blank()
+  )
+
+#lichen/berries
+ggplot(data = df) +
+  geom_point(aes(x = date, y = TS_2_1_1, color = "Site Soil Temperature at 15 cm - lichen/berries"))+
+  geom_point(aes(x = date, y = TS_ERA5, color = "ERA5 Soil Temperature")) +
+  theme_bw()+
+  labs(
+    x = "Date",
+    y = "Soil Temperature (C)"
+  ) +
+  theme(
+    legend.title = element_blank()
+  )
+
+#foot of EC tower 
+ggplot(data = df) +
+  geom_point(aes(x = date, y = TS_4_1_1, color = "Site Soil Temperature at 15 cm - EC tower"))+
+  geom_point(aes(x = date, y = TS_ERA5, color = "ERA5 Soil Temperature")) +
+  theme_bw()+
+  labs(
+    x = "Date",
+    y = "Soil Temperature (°C)"
+  ) +
+  theme(
+    legend.title = element_blank()
+  )
+
+#============== AIR TEMP ============================
+
+plot_TA <- ggplot(data = df) +
+  geom_point(aes(x = date, y = TA, color = "Site Temperature"))+
+  geom_point(aes(x = date, y = TA_ERA5, color = "ERA5 Temperature")) +
+  theme_bw()+
+  labs(
+    x = "Date",
+    y = "Air Temperature (°C)"
+  ) +
+  theme(
+    legend.title = element_blank()
+  )
+
+plot_TA
+
+
+
+
+```
+#combined timeseries fig for TA and TS
+```{r}
+library(patchwork)
+
+plot_TS + plot_TA
+
+
+# Save
+ggsave("C:/Users/kkent/Documents/Github Flux Network/Council_Flux_Analysis_Paper/Council Figures/ERA5_site_temp_agreement_timeseries.png",
+       width = 9, height = 5, dpi = 600)
+
+```
 

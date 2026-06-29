@@ -343,6 +343,5 @@ filename = paste("./",filename,".csv",sep = "")
 
 write.csv(x = US_NGC2.2, file = filename,row.names = F,na = "-9999",quote = F)
 
-#final doc name will look like this: US-NGC2_HH_201701010000_202309010000.csv --> saves to my Github council folder 
-
+#final doc name will look like this: US-NGC2_HH_201701010000_202309010000.csv 
 ```

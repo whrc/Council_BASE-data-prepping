@@ -37,7 +37,6 @@ Sys.setenv(TZ='UTC')
 
 # Set working directory and then Load data
 
-TO DO: re-running all these with SWC_3 (tussock) version of dataset - KK 1/7/2025 **use the era dataset** 
 
 ```{r}
 #changed to "council_gapfilled_clean_2017_2023_for analysis.2.csv" --> .2 indicates updated dataset with SWC_3 tussock 

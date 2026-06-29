@@ -37,10 +37,6 @@ library(openair)
 ##na.strings = c('-9999','NA','NaN','NAN','-7999')
 
 
-#using ".2" for updated SWC 
-#df = fread(input = "C:/Users/kkent/Documents/Council Data/Council BASE gapfilling/US-NGC2.2_HH_201701010000_202309010000.csv", na.strings = "-9999")
-##na.strings = c('-9999','NA','NaN','NAN','-7999')
-
 df = fread(input ="C:/Users/kkent/Documents/Github Flux Network/Council BASE prepping/Council_BASE-data-prepping/US-NGC2.2_HH_201701010000_202309010000.csv", na.strings = "-9999")
 
 
